@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Data Importer Admin System</title>
+    <link rel="icon" href="/favicon.ico">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.39.3/umd/supabase.min.js"></script>
     <script type="module">
@@ -961,25 +962,30 @@
                     excelData = rows.map(row => {
                         const obj = {};
                         headers.forEach((header, index) => {
-                            if (currentProfile.columnMapping[header]) {
-                                let value = row[index];
-                                
-                                // Handle date conversion
-                                if ((header === 'Date Added' || header === 'Cancelation Date') && value) {
-                                    value = convertExcelDate(value);
+                            if (!currentProfile.columnMapping[header]) return;
+                            const targetKey = currentProfile.columnMapping[header];
+                            let value = row[index];
+
+                            // Normalize blanks to null for dates/numbers
+                            if (['Date Added', 'Cancelation Date'].includes(header)) {
+                                value = convertExcelDate(value);
+                            } else if (['LR', 'Insured Value', 'Premium', 'Account Balance'].includes(header)) {
+                                if (value === null || value === undefined || value === '') {
+                                    value = null;
+                                } else {
+                                    value = parseFloat(value);
+                                    if (Number.isNaN(value)) value = null;
                                 }
-                                
-                                // Handle numeric fields
-                                if (['LR', 'Insured Value', 'Premium', 'Account Balance'].includes(header) && value !== null && value !== undefined && value !== '') {
-                                    value = parseFloat(value) || 0;
+                            } else if (['Item Number', 'Year', 'Debit Day', 'ID Number'].includes(header)) {
+                                if (value === null || value === undefined || value === '') {
+                                    value = null;
+                                } else {
+                                    value = parseInt(value);
+                                    if (Number.isNaN(value)) value = null;
                                 }
-                                
-                                if (['Item Number', 'Year', 'Debit Day', 'ID Number'].includes(header) && value !== null && value !== undefined && value !== '') {
-                                    value = parseInt(value) || null;
-                                }
-                                
-                                obj[currentProfile.columnMapping[header]] = value;
                             }
+
+                            obj[targetKey] = value;
                         });
                         return obj;
                     });
@@ -997,23 +1003,29 @@
 
         // Convert Excel date to proper format
         function convertExcelDate(excelDate) {
-            if (!excelDate) return null;
-            
-            // If it's already a string in DD/MM/YYYY format
-            if (typeof excelDate === 'string' && excelDate.includes('/')) {
-                const parts = excelDate.split('/');
-                if (parts.length === 3) {
-                    // Convert DD/MM/YYYY to YYYY-MM-DD
-                    return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            if (excelDate === null || excelDate === undefined || excelDate === '') return null;
+            // DD/MM/YYYY to YYYY-MM-DD
+            if (typeof excelDate === 'string') {
+                const trimmed = excelDate.trim();
+                if (trimmed === '') return null;
+                if (trimmed.includes('/')) {
+                    const parts = trimmed.split('/');
+                    if (parts.length === 3 && parts[2].length >= 2) {
+                        const yyyy = parts[2].padStart(4, '0');
+                        const mm = parts[1].padStart(2, '0');
+                        const dd = parts[0].padStart(2, '0');
+                        return `${yyyy}-${mm}-${dd}`;
+                    }
                 }
+                // Already ISO-like
+                if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
             }
-            
-            // If it's an Excel serial number
+            // Excel serial
             if (typeof excelDate === 'number') {
                 const date = new Date((excelDate - 25569) * 86400 * 1000);
+                if (Number.isNaN(date.getTime())) return null;
                 return date.toISOString().split('T')[0];
             }
-            
             return null;
         }
 
