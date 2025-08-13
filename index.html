@@ -516,18 +516,14 @@
                                 <input type="text" id="profileName" required placeholder="e.g., MMXPolicyData">
                             </div>
                             <div class="form-group">
-                                <label for="tableName">Table Name:</label>
-                                <input type="text" id="tableName" required placeholder="e.g., mmxpolicyitems">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="supabaseUrl">Supabase URL:</label>
-                                <input type="url" id="supabaseUrl" required placeholder="https://your-project.supabase.co">
-                            </div>
-                            <div class="form-group">
-                                <label for="supabaseKey">Supabase Key:</label>
-                                <input type="text" id="supabaseKey" required placeholder="Your anon/public key">
+                                <label for="tableNameSelect">Table:</label>
+                                <select id="tableNameSelect" required>
+                                    <option value="">Select table...</option>
+                                </select>
+                                <div style="display:flex; gap:0.5rem; align-items:center; margin-top:0.5rem;">
+                                    <input type="text" id="newTableName" placeholder="Add table name" style="flex:1">
+                                    <button type="button" class="btn-small" id="addTableBtn">Add</button>
+                                </div>
                             </div>
                         </div>
                         <div class="form-group">
@@ -642,6 +638,7 @@
         let currentProfile = null;
         let excelData = [];
         let supabase = null;
+        let envLoaded = false;
         let editingProfileId = null;
 
         // Default admin password
@@ -667,6 +664,8 @@
             // Load profiles
             loadProfiles();
             updateSystemInfo();
+            // Initialize Supabase once from Vercel env via serverless function
+            initializeSupabaseFromEnv();
         });
 
         // Login functionality
@@ -717,8 +716,6 @@
                     id: 'mmxpolicydata',
                     name: 'MMXPolicyData',
                     tableName: 'mmxpolicyitems',
-                    supabaseUrl: '',
-                    supabaseKey: '',
                     description: 'Default profile for MMX Policy Items import',
                     columnMapping: {
                         'Policy Number': 'policy_number',
@@ -802,9 +799,7 @@
             
             const profile = {
                 name: document.getElementById('profileName').value,
-                tableName: document.getElementById('tableName').value,
-                supabaseUrl: document.getElementById('supabaseUrl').value,
-                supabaseKey: document.getElementById('supabaseKey').value,
+                tableName: document.getElementById('tableNameSelect').value,
                 description: document.getElementById('description').value,
                 columnMapping: {},
                 updatedAt: new Date().toISOString()
@@ -866,9 +861,8 @@
             
             if (profile) {
                 document.getElementById('profileName').value = profile.name;
-                document.getElementById('tableName').value = profile.tableName;
-                document.getElementById('supabaseUrl').value = profile.supabaseUrl;
-                document.getElementById('supabaseKey').value = profile.supabaseKey;
+                populateTableDropdown();
+                document.getElementById('tableNameSelect').value = profile.tableName;
                 document.getElementById('description').value = profile.description || '';
                 document.getElementById('columnMapping').value = JSON.stringify(profile.columnMapping, null, 2);
                 
@@ -888,6 +882,10 @@
                 profiles.map(profile => 
                     `<option value="${profile.id}">${profile.name}</option>`
                 ).join('');
+            // Ensure table dropdown has all tables discovered from profiles
+            const allTables = Array.from(new Set(profiles.map(p => p.tableName).filter(Boolean)));
+            if (allTables.length) saveKnownTables(allTables.concat(getKnownTables()));
+            populateTableDropdown();
         }
 
         // Import functionality
@@ -901,19 +899,10 @@
                     <strong>Table:</strong> ${currentProfile.tableName}<br>
                     <strong>Description:</strong> ${currentProfile.description || 'No description'}<br>
                     <strong>Columns:</strong> ${Object.keys(currentProfile.columnMapping).length} mapped<br>
-                    <strong>URL:</strong> ${currentProfile.supabaseUrl || 'Not configured'}
                 `;
-                
-                // Initialize Supabase connection
-                if (currentProfile.supabaseUrl && currentProfile.supabaseKey) {
-                    try {
-                        supabase = window.supabase.createClient(currentProfile.supabaseUrl, currentProfile.supabaseKey);
-                        showStatus(`Profile "${currentProfile.name}" loaded successfully`, 'success');
-                    } catch (error) {
-                        showStatus('Failed to initialize Supabase connection: ' + error.message, 'error');
-                    }
-                } else {
-                    showStatus('Profile is missing Supabase configuration', 'error');
+                // Ensure Supabase connection is initialized
+                if (!supabase) {
+                    initializeSupabaseFromEnv();
                 }
             }
         });
@@ -1258,6 +1247,62 @@
 
         // Load draft on page load
         setTimeout(loadSavedFormData, 100);
+
+        // Tables dropdown helpers
+        function getKnownTables() {
+            const raw = localStorage.getItem('knownTables');
+            try { return raw ? JSON.parse(raw) : []; } catch (_) { return []; }
+        }
+        function saveKnownTables(tables) {
+            localStorage.setItem('knownTables', JSON.stringify(Array.from(new Set(tables))));
+        }
+        function addKnownTable(name) {
+            if (!name) return;
+            const tables = getKnownTables();
+            if (!tables.includes(name)) {
+                tables.push(name);
+                saveKnownTables(tables);
+            }
+            populateTableDropdown();
+        }
+        function populateTableDropdown() {
+            const select = document.getElementById('tableNameSelect');
+            if (!select) return;
+            const current = select.value;
+            const tables = getKnownTables();
+            select.innerHTML = '<option value="">Select table...</option>' +
+                tables.map(t => `<option value="${t}">${t}</option>`).join('');
+            if (current && tables.includes(current)) select.value = current;
+        }
+        // Wire up add table button
+        document.addEventListener('DOMContentLoaded', function() {
+            populateTableDropdown();
+            const addBtn = document.getElementById('addTableBtn');
+            if (addBtn) {
+                addBtn.addEventListener('click', function() {
+                    const name = document.getElementById('newTableName').value.trim();
+                    if (!name) return;
+                    addKnownTable(name);
+                    document.getElementById('newTableName').value = '';
+                    showStatus(`Added table "${name}" to list`, 'success');
+                });
+            }
+        });
+
+        // Supabase env loader
+        async function initializeSupabaseFromEnv() {
+            if (envLoaded && supabase) return;
+            try {
+                const res = await fetch('/api/env');
+                if (!res.ok) throw new Error('Failed to load env');
+                const cfg = await res.json();
+                if (!cfg.url || !cfg.key) throw new Error('Missing Supabase env vars');
+                supabase = window.supabase.createClient(cfg.url, cfg.key);
+                envLoaded = true;
+            } catch (err) {
+                showStatus('Unable to initialize Supabase: ' + err.message, 'error');
+            }
+        }
     </script>
 </body>
 </html>
