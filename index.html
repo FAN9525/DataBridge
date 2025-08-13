@@ -640,6 +640,17 @@
                         <p><strong>Local Storage:</strong> <span id="storageUsed">-</span></p>
                     </div>
                 </div>
+
+                <div class="form-section">
+                    <h3>Import History</h3>
+                    <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
+                        <button type="button" class="btn-primary" id="exportLogsBtn" style="width:auto;">Export CSV</button>
+                        <button type="button" class="btn-danger" id="clearLogsBtn" style="width:auto;">Clear History</button>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table class="preview-table" id="importHistoryTable"></table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -653,6 +664,7 @@
         let editingProfileId = null;
         let importCancelled = false;
         let importStartTime = null;
+        const IMPORT_LOGS_KEY = 'importLogs';
 
         // Default admin password
         let adminPassword = 'P@ss100alone';
@@ -701,6 +713,7 @@
             loadProfiles();
             loadProfilesForImport();
             updateSystemInfo();
+            renderImportHistory();
         }
 
         function logout() {
@@ -1159,10 +1172,35 @@
                 updateProgress(100, 'Import completed successfully!', `Processed ${excelData.length}/${excelData.length} • ${(excelData.length/Math.max((Date.now()-importStartTime)/1000,0.001)).toFixed(1)} rec/s • ETA 0m 0s`);
                 
                 showStatus(`🎉 Successfully imported ${excelData.length} records to "${currentProfile.name}" profile! All existing data was replaced with the new dataset.`, 'success');
+                appendImportLog({
+                    id: generateId(),
+                    profileId: currentProfile.id,
+                    profileName: currentProfile.name,
+                    table: currentProfile.tableName,
+                    total: excelData.length,
+                    startedAt: new Date(importStartTime).toISOString(),
+                    finishedAt: new Date().toISOString(),
+                    durationSec: Math.round((Date.now() - importStartTime)/1000),
+                    status: 'success'
+                });
+                renderImportHistory();
                 
             } catch (error) {
                 showStatus('❌ Import failed: ' + error.message, 'error');
                 console.error('Import error:', error);
+                appendImportLog({
+                    id: generateId(),
+                    profileId: currentProfile && currentProfile.id,
+                    profileName: currentProfile && currentProfile.name,
+                    table: currentProfile && currentProfile.tableName,
+                    total: excelData ? excelData.length : 0,
+                    startedAt: importStartTime ? new Date(importStartTime).toISOString() : null,
+                    finishedAt: new Date().toISOString(),
+                    durationSec: importStartTime ? Math.round((Date.now() - importStartTime)/1000) : null,
+                    status: importCancelled ? 'cancelled' : 'error',
+                    error: String(error && error.message ? error.message : error)
+                });
+                renderImportHistory();
             } finally {
                 this.disabled = false;
                 setTimeout(() => showProgress(false), 2000);
@@ -1215,6 +1253,53 @@
                 }
             }
             document.getElementById('storageUsed').textContent = (totalSize / 1024).toFixed(2) + ' KB';
+        }
+
+        // Import logs helpers
+        function getImportLogs() {
+            try {
+                const raw = localStorage.getItem(IMPORT_LOGS_KEY);
+                return raw ? JSON.parse(raw) : [];
+            } catch (_) {
+                return [];
+            }
+        }
+        function saveImportLogs(logs) {
+            localStorage.setItem(IMPORT_LOGS_KEY, JSON.stringify(logs));
+        }
+        function appendImportLog(entry) {
+            const logs = getImportLogs();
+            logs.unshift(entry);
+            // Cap history to last 200 entries to avoid unbounded growth
+            if (logs.length > 200) logs.length = 200;
+            saveImportLogs(logs);
+        }
+        function renderImportHistory() {
+            const table = document.getElementById('importHistoryTable');
+            if (!table) return;
+            const logs = getImportLogs();
+            if (logs.length === 0) {
+                table.innerHTML = '<tbody><tr><td style="padding:0.75rem;">No imports yet.</td></tr></tbody>';
+                return;
+            }
+            const header = ['Time', 'Profile', 'Table', 'Records', 'Duration', 'Status'];
+            let html = '<thead><tr>' + header.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+            html += logs.map(l => {
+                const time = l.finishedAt ? new Date(l.finishedAt).toLocaleString() : '-';
+                const prof = l.profileName || l.profileId || '-';
+                const dur = (l.durationSec != null) ? `${l.durationSec}s` : '-';
+                const status = l.status || 'unknown';
+                return `<tr>
+                    <td>${time}</td>
+                    <td>${prof}</td>
+                    <td>${l.table || '-'}</td>
+                    <td>${l.total ?? '-'}</td>
+                    <td>${dur}</td>
+                    <td>${status}</td>
+                </tr>`;
+            }).join('');
+            html += '</tbody>';
+            table.innerHTML = html;
         }
 
         // Utility functions
@@ -1338,6 +1423,31 @@
                     importCancelled = true;
                     this.disabled = true;
                     updateProgress(undefined, 'Cancelling...');
+                });
+            }
+            const exportBtn = document.getElementById('exportLogsBtn');
+            if (exportBtn) {
+                exportBtn.addEventListener('click', function() {
+                    const logs = getImportLogs();
+                    if (!logs.length) return;
+                    const headers = ['id','finishedAt','profileName','table','total','durationSec','status'];
+                    const csv = [headers.join(',')].concat(logs.map(l => headers.map(h => JSON.stringify(l[h] ?? '')).join(','))).join('\n');
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `import-history-${Date.now()}.csv`;
+                    a.click();
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                });
+            }
+            const clearBtn = document.getElementById('clearLogsBtn');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', function() {
+                    if (!confirm('Clear all import history?')) return;
+                    saveImportLogs([]);
+                    renderImportHistory();
+                    showStatus('Import history cleared', 'success');
                 });
             }
         });
