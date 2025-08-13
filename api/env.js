@@ -1,8 +1,7 @@
 module.exports = (req, res) => {
 	res.setHeader('Content-Type', 'application/json');
-	const body = {
-		url: process.env.SUPABASE_URL,
-		key: process.env.SUPABASE_ANON_KEY,
-	};
-	res.end(JSON.stringify(body));
+	// Defensive: avoid exposing undefined
+	const url = process.env.SUPABASE_URL || '';
+	const key = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+	res.end(JSON.stringify({ url, key }));
 };
