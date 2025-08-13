@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Importer Admin System</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.39.3/umd/supabase.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            min-height: 100vh;
+            box-shadow: 0 0 30px rgba(0,0,0,0.1);
+        }
+
+        /* Header Styles */
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 300;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .btn-logout {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-logout:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        /* Navigation */
+        .nav-tabs {
+            background: #f8f9fa;
+            border-bottom: 1px solid #e1e5e9;
+            padding: 0 2rem;
+            display: flex;
+            gap: 0;
+        }
+
+        .nav-tab {
+            padding: 1rem 1.5rem;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .nav-tab:hover {
+            background: #e9ecef;
+        }
+
+        .nav-tab.active {
+            background: white;
+            border-bottom-color: #4facfe;
+            color: #4facfe;
+        }
+
+        /* Content Area */
+        .content {
+            padding: 2rem;
+        }
+
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        /* Login Page */
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .login-box {
+            background: white;
+            padding: 3rem;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        .login-box h2 {
+            color: #2c3e50;
+            margin-bottom: 2rem;
+            font-size: 2rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        input[type="text"], 
+        input[type="password"], 
+        input[type="url"], 
+        select, 
+        textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #4facfe;
+            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: 0.75rem;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(79, 172, 254, 0.4);
+        }
+
+        .btn-primary:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        }
+
+        .btn-success:hover:not(:disabled) {
+            box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
+        }
+
+        /* Profile Management */
+        .profile-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .profile-card {
+            background: #f8f9fa;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .profile-card:hover {
+            border-color: #4facfe;
+            box-shadow: 0 5px 15px rgba(79, 172, 254, 0.2);
+        }
+
+        .profile-card.active {
+            border-color: #28a745;
+            background: #e8f5e8;
+        }
+
+        .profile-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .profile-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .profile-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .btn-small {
+            padding: 0.3rem 0.6rem;
+            font-size: 0.8rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-edit {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .btn-delete {
+            background: #dc3545;
+            color: white;
+        }
+
+        .profile-info {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+
+        /* Forms */
+        .form-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border-left: 4px solid #4facfe;
+        }
+
+        .form-section h3 {
+            color: #2c3e50;
+            margin-bottom: 1.5rem;
+            font-size: 1.3rem;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        /* Import Page */
+        .import-header {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 2rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .file-input-wrapper:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .file-input-wrapper input[type="file"] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .file-info {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #e8f5e8;
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+            display: none;
+        }
+
+        .preview-section {
+            margin: 2rem 0;
+            display: none;
+        }
+
+        .preview-table {
+            width: 100%;
+            border-collapse: collapse;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .preview-table th,
+        .preview-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #e1e5e9;
+        }
+
+        .preview-table th {
+            background: #4facfe;
+            color: white;
+            font-weight: 600;
+        }
+
+        .preview-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .batch-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .batch-stat {
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .batch-stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #4facfe;
+        }
+
+        .batch-stat-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+
+        /* Progress and Status */
+        .progress-section {
+            display: none;
+            margin-top: 1rem;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e1e5e9;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .status-message {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            font-weight: 600;
+        }
+
+        .status-success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            color: #155724;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            color: #721c24;
+        }
+
+        .status-info {
+            background: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            color: #0c5460;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+            
+            .nav-tabs {
+                flex-wrap: wrap;
+                padding: 0 1rem;
+            }
+            
+            .content {
+                padding: 1rem;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .profile-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Page -->
+    <div id="loginPage" class="login-container">
+        <div class="login-box">
+            <h2>🔐 Admin Access</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="password">Password:</label>
+                    <input type="password" id="password" required placeholder="Enter admin password">
+                </div>
+                <button type="submit" class="btn-primary">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Application -->
+    <div id="mainApp" class="container hidden">
+        <!-- Header -->
+        <div class="header">
+            <h1>📊 Data Importer Admin</h1>
+            <div class="user-info">
+                <span>Admin Session</span>
+                <button class="btn-logout" onclick="logout()">Logout</button>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="nav-tabs">
+            <div class="nav-tab active" onclick="showPage('profiles')">📁 Import Profiles</div>
+            <div class="nav-tab" onclick="showPage('import')">📤 Data Import</div>
+            <div class="nav-tab" onclick="showPage('settings')">⚙️ Settings</div>
+        </div>
+
+        <!-- Content Area -->
+        <div class="content">
+            <!-- Profiles Page -->
+            <div id="profilesPage" class="page active">
+                <h2>Import Profiles Management</h2>
+                
+                <div class="form-section">
+                    <h3>Create New Profile</h3>
+                    <form id="profileForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="profileName">Profile Name:</label>
+                                <input type="text" id="profileName" required placeholder="e.g., MMXPolicyData">
+                            </div>
+                            <div class="form-group">
+                                <label for="tableName">Table Name:</label>
+                                <input type="text" id="tableName" required placeholder="e.g., mmxpolicyitems">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="supabaseUrl">Supabase URL:</label>
+                                <input type="url" id="supabaseUrl" required placeholder="https://your-project.supabase.co">
+                            </div>
+                            <div class="form-group">
+                                <label for="supabaseKey">Supabase Key:</label>
+                                <input type="text" id="supabaseKey" required placeholder="Your anon/public key">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="description">Description:</label>
+                            <textarea id="description" rows="3" placeholder="Brief description of this import profile"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="columnMapping">Column Mapping (JSON):</label>
+                            <textarea id="columnMapping" rows="6" placeholder='{"Excel Column": "database_column", ...}'></textarea>
+                        </div>
+                        <button type="submit" class="btn-primary">
+                            <span id="profileFormSubmitText">Create Profile</span>
+                        </button>
+                    </form>
+                </div>
+
+                <h3>Existing Profiles</h3>
+                <div id="profilesList" class="profile-grid">
+                    <!-- Profiles will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Import Page -->
+            <div id="importPage" class="page">
+                <div class="import-header">
+                    <h2>📤 Data Import</h2>
+                    <p>Select a profile and upload your data file</p>
+                </div>
+
+                <div class="form-section">
+                    <h3>Select Import Profile</h3>
+                    <div class="form-group">
+                        <label for="selectedProfile">Import Profile:</label>
+                        <select id="selectedProfile" required>
+                            <option value="">Select a profile...</option>
+                        </select>
+                    </div>
+                    <div id="profileDetails" class="profile-info" style="margin-top: 1rem;"></div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Upload Data File</h3>
+                    <div style="text-align: center;">
+                        <label class="file-input-wrapper">
+                            📁 Choose Excel File
+                            <input type="file" id="fileInput" accept=".xlsx,.xls">
+                        </label>
+                        <div class="file-info" id="fileInfo"></div>
+                    </div>
+                </div>
+
+                <div class="preview-section" id="previewSection">
+                    <h3>📋 Data Preview (First 5 Rows)</h3>
+                    <div style="overflow-x: auto;">
+                        <table class="preview-table" id="previewTable"></table>
+                    </div>
+                    <div class="batch-info" id="batchInfo"></div>
+                </div>
+
+                <button class="btn-success" id="importBtn" disabled style="width: 100%; padding: 1rem; font-size: 1.2rem;">
+                    🚀 Import Data
+                </button>
+
+                <div class="progress-section" id="progressSection">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div id="progressText">Preparing import...</div>
+                </div>
+
+                <div id="statusContainer"></div>
+            </div>
+
+            <!-- Settings Page -->
+            <div id="settingsPage" class="page">
+                <h2>System Settings</h2>
+                
+                <div class="form-section">
+                    <h3>Change Admin Password</h3>
+                    <form id="passwordForm">
+                        <div class="form-group">
+                            <label for="currentPassword">Current Password:</label>
+                            <input type="password" id="currentPassword" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="newPassword">New Password:</label>
+                            <input type="password" id="newPassword" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="confirmPassword">Confirm New Password:</label>
+                            <input type="password" id="confirmPassword" required>
+                        </div>
+                        <button type="submit" class="btn-primary">Update Password</button>
+                    </form>
+                </div>
+
+                <div class="form-section">
+                    <h3>System Information</h3>
+                    <div class="profile-info">
+                        <p><strong>Version:</strong> 1.0.0</p>
+                        <p><strong>Last Login:</strong> <span id="lastLogin">-</span></p>
+                        <p><strong>Profiles Count:</strong> <span id="profilesCount">0</span></p>
+                        <p><strong>Local Storage:</strong> <span id="storageUsed">-</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentProfile = null;
+        let excelData = [];
+        let supabase = null;
+        let editingProfileId = null;
+
+        // Default admin password
+        let adminPassword = 'P@ss100alone';
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load saved password
+            const savedPassword = localStorage.getItem('adminPassword');
+            if (savedPassword) {
+                adminPassword = savedPassword;
+            }
+
+            // Check if already logged in
+            const isLoggedIn = sessionStorage.getItem('isLoggedIn');
+            if (isLoggedIn === 'true') {
+                showMainApp();
+            }
+
+            // Initialize default profile if none exist
+            initializeDefaultProfile();
+            
+            // Load profiles
+            loadProfiles();
+            updateSystemInfo();
+        });
+
+        // Login functionality
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const password = document.getElementById('password').value;
+            
+            if (password === adminPassword) {
+                sessionStorage.setItem('isLoggedIn', 'true');
+                localStorage.setItem('lastLogin', new Date().toISOString());
+                showMainApp();
+            } else {
+                showStatus('Invalid password', 'error');
+            }
+        });
+
+        function showMainApp() {
+            document.getElementById('loginPage').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+            loadProfiles();
+            loadProfilesForImport();
+            updateSystemInfo();
+        }
+
+        function logout() {
+            sessionStorage.removeItem('isLoggedIn');
+            document.getElementById('loginPage').classList.remove('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+            document.getElementById('password').value = '';
+        }
+
+        // Navigation
+        function showPage(pageId) {
+            // Update tabs
+            document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Update pages
+            document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+            document.getElementById(pageId + 'Page').classList.add('active');
+        }
+
+        // Initialize default profile
+        function initializeDefaultProfile() {
+            const profiles = getProfiles();
+            if (profiles.length === 0) {
+                const defaultProfile = {
+                    id: 'mmxpolicydata',
+                    name: 'MMXPolicyData',
+                    tableName: 'mmxpolicyitems',
+                    supabaseUrl: '',
+                    supabaseKey: '',
+                    description: 'Default profile for MMX Policy Items import',
+                    columnMapping: {
+                        'Policy Number': 'policy_number',
+                        'Client Name': 'client_name',
+                        'UMA': 'uma',
+                        'Insurer': 'insurer',
+                        'Email': 'email',
+                        'LR': 'lr',
+                        'ID Number': 'id_number',
+                        'Phone': 'phone',
+                        'Policy Section': 'policy_section',
+                        'Description': 'description',
+                        'S/N': 'serial_number',
+                        'Item Number': 'item_number',
+                        'Risk Address': 'risk_address',
+                        'Product': 'product',
+                        'Make': 'make',
+                        'Model': 'model',
+                        'Year': 'year',
+                        'Reg Number': 'reg_number',
+                        'Vin Number': 'vin_number',
+                        'Engine Number': 'engine_number',
+                        'Insured Value': 'insured_value',
+                        'Date Added': 'date_added',
+                        'Policy Status': 'policy_status',
+                        'Cancelation Date': 'cancelation_date',
+                        'Debit Day': 'debit_day',
+                        'Account Balance': 'account_balance',
+                        'Broker': 'broker',
+                        'Cover Type': 'cover_type',
+                        'Vehicle Type': 'vehicle_type',
+                        'Vehicle Use': 'vehicle_use',
+                        'Premium': 'premium',
+                        'Status': 'status',
+                        'Link rewards code': 'link_rewards_code'
+                    },
+                    createdAt: new Date().toISOString()
+                };
+                saveProfile(defaultProfile);
+            }
+        }
+
+        // Profile management
+        function getProfiles() {
+            const profiles = localStorage.getItem('importProfiles');
+            return profiles ? JSON.parse(profiles) : [];
+        }
+
+        function saveProfile(profile) {
+            const profiles = getProfiles();
+            const existingIndex = profiles.findIndex(p => p.id === profile.id);
+            
+            if (existingIndex >= 0) {
+                profiles[existingIndex] = profile;
+            } else {
+                profile.id = profile.id || generateId();
+                profiles.push(profile);
+            }
+            
+            localStorage.setItem('importProfiles', JSON.stringify(profiles));
+            loadProfiles();
+            loadProfilesForImport();
+        }
+
+        function deleteProfile(profileId) {
+            if (confirm('Are you sure you want to delete this profile?')) {
+                const profiles = getProfiles().filter(p => p.id !== profileId);
+                localStorage.setItem('importProfiles', JSON.stringify(profiles));
+                loadProfiles();
+                loadProfilesForImport();
+            }
+        }
+
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+
+        // Profile form handling
+        document.getElementById('profileForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const profile = {
+                name: document.getElementById('profileName').value,
+                tableName: document.getElementById('tableName').value,
+                supabaseUrl: document.getElementById('supabaseUrl').value,
+                supabaseKey: document.getElementById('supabaseKey').value,
+                description: document.getElementById('description').value,
+                columnMapping: {},
+                updatedAt: new Date().toISOString()
+            };
+
+            // Parse column mapping
+            try {
+                const mappingText = document.getElementById('columnMapping').value;
+                profile.columnMapping = mappingText ? JSON.parse(mappingText) : {};
+            } catch (error) {
+                showStatus('Invalid JSON in column mapping', 'error');
+                return;
+            }
+
+            if (editingProfileId) {
+                profile.id = editingProfileId;
+                editingProfileId = null;
+                document.getElementById('profileFormSubmitText').textContent = 'Create Profile';
+            } else {
+                profile.createdAt = new Date().toISOString();
+            }
+
+            saveProfile(profile);
+            this.reset();
+            showStatus('Profile saved successfully', 'success');
+        });
+
+        function loadProfiles() {
+            const profiles = getProfiles();
+            const container = document.getElementById('profilesList');
+            
+            if (profiles.length === 0) {
+                container.innerHTML = '<p>No profiles found. Create your first profile above.</p>';
+                return;
+            }
+
+            container.innerHTML = profiles.map(profile => `
+                <div class="profile-card">
+                    <div class="profile-header">
+                        <div class="profile-name">${profile.name}</div>
+                        <div class="profile-actions">
+                            <button class="btn-small btn-edit" onclick="editProfile('${profile.id}')">Edit</button>
+                            <button class="btn-small btn-delete" onclick="deleteProfile('${profile.id}')">Delete</button>
+                        </div>
+                    </div>
+                    <div class="profile-info">
+                        <p><strong>Table:</strong> ${profile.tableName}</p>
+                        <p><strong>Description:</strong> ${profile.description || 'No description'}</p>
+                        <p><strong>Columns:</strong> ${Object.keys(profile.columnMapping).length} mapped</p>
+                        <p><strong>Created:</strong> ${new Date(profile.createdAt).toLocaleDateString()}</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function editProfile(profileId) {
+            const profiles = getProfiles();
+            const profile = profiles.find(p => p.id === profileId);
+            
+            if (profile) {
+                document.getElementById('profileName').value = profile.name;
+                document.getElementById('tableName').value = profile.tableName;
+                document.getElementById('supabaseUrl').value = profile.supabaseUrl;
+                document.getElementById('supabaseKey').value = profile.supabaseKey;
+                document.getElementById('description').value = profile.description || '';
+                document.getElementById('columnMapping').value = JSON.stringify(profile.columnMapping, null, 2);
+                
+                editingProfileId = profileId;
+                document.getElementById('profileFormSubmitText').textContent = 'Update Profile';
+                
+                // Scroll to form
+                document.getElementById('profileForm').scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        function loadProfilesForImport() {
+            const profiles = getProfiles();
+            const select = document.getElementById('selectedProfile');
+            
+            select.innerHTML = '<option value="">Select a profile...</option>' +
+                profiles.map(profile => 
+                    `<option value="${profile.id}">${profile.name}</option>`
+                ).join('');
+        }
+
+        // Import functionality
+        document.getElementById('selectedProfile').addEventListener('change', function() {
+            const profileId = this.value;
+            const profiles = getProfiles();
+            currentProfile = profiles.find(p => p.id === profileId);
+            
+            if (currentProfile) {
+                document.getElementById('profileDetails').innerHTML = `
+                    <strong>Table:</strong> ${currentProfile.tableName}<br>
+                    <strong>Description:</strong> ${currentProfile.description || 'No description'}<br>
+                    <strong>Columns:</strong> ${Object.keys(currentProfile.columnMapping).length} mapped<br>
+                    <strong>URL:</strong> ${currentProfile.supabaseUrl || 'Not configured'}
+                `;
+                
+                // Initialize Supabase connection
+                if (currentProfile.supabaseUrl && currentProfile.supabaseKey) {
+                    try {
+                        supabase = window.supabase.createClient(currentProfile.supabaseUrl, currentProfile.supabaseKey);
+                        showStatus(`Profile "${currentProfile.name}" loaded successfully`, 'success');
+                    } catch (error) {
+                        showStatus('Failed to initialize Supabase connection: ' + error.message, 'error');
+                    }
+                } else {
+                    showStatus('Profile is missing Supabase configuration', 'error');
+                }
+            }
+        });
+
+        // File upload handling
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (!currentProfile) {
+                showStatus('Please select an import profile first', 'error');
+                return;
+            }
+
+            const fileInfo = document.getElementById('fileInfo');
+            fileInfo.innerHTML = `
+                <strong>📄 File Selected:</strong> ${file.name}<br>
+                <strong>📏 Size:</strong> ${(file.size / 1024 / 1024).toFixed(2)} MB<br>
+                <strong>📅 Last Modified:</strong> ${new Date(file.lastModified).toLocaleString()}
+            `;
+            fileInfo.style.display = 'block';
+
+            // Read Excel file
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
+                    // Convert to JSON
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                    
+                    if (jsonData.length < 2) {
+                        showStatus('Excel file appears to be empty or has no data rows', 'error');
+                        return;
+                    }
+
+                    // Process the data
+                    const headers = jsonData[0];
+                    const rows = jsonData.slice(1).filter(row => row.some(cell => cell !== null && cell !== undefined && cell !== ''));
+                    
+                    excelData = rows.map(row => {
+                        const obj = {};
+                        headers.forEach((header, index) => {
+                            if (currentProfile.columnMapping[header]) {
+                                let value = row[index];
+                                
+                                // Handle date conversion
+                                if ((header === 'Date Added' || header === 'Cancelation Date') && value) {
+                                    value = convertExcelDate(value);
+                                }
+                                
+                                // Handle numeric fields
+                                if (['LR', 'Insured Value', 'Premium', 'Account Balance'].includes(header) && value !== null && value !== undefined && value !== '') {
+                                    value = parseFloat(value) || 0;
+                                }
+                                
+                                if (['Item Number', 'Year', 'Debit Day', 'ID Number'].includes(header) && value !== null && value !== undefined && value !== '') {
+                                    value = parseInt(value) || null;
+                                }
+                                
+                                obj[currentProfile.columnMapping[header]] = value;
+                            }
+                        });
+                        return obj;
+                    });
+
+                    showPreview(excelData);
+                    document.getElementById('importBtn').disabled = false;
+                    showStatus(`✅ File processed successfully! Found ${excelData.length} records`, 'success');
+                    
+                } catch (error) {
+                    showStatus('Error reading Excel file: ' + error.message, 'error');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // Convert Excel date to proper format
+        function convertExcelDate(excelDate) {
+            if (!excelDate) return null;
+            
+            // If it's already a string in DD/MM/YYYY format
+            if (typeof excelDate === 'string' && excelDate.includes('/')) {
+                const parts = excelDate.split('/');
+                if (parts.length === 3) {
+                    // Convert DD/MM/YYYY to YYYY-MM-DD
+                    return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                }
+            }
+            
+            // If it's an Excel serial number
+            if (typeof excelDate === 'number') {
+                const date = new Date((excelDate - 25569) * 86400 * 1000);
+                return date.toISOString().split('T')[0];
+            }
+            
+            return null;
+        }
+
+        // Show data preview
+        function showPreview(data) {
+            const previewSection = document.getElementById('previewSection');
+            const previewTable = document.getElementById('previewTable');
+            const batchInfo = document.getElementById('batchInfo');
+            
+            // Show first 5 rows
+            const previewData = data.slice(0, 5);
+            const allKeys = [...new Set(data.flatMap(Object.keys))];
+            
+            let tableHTML = '<thead><tr>';
+            allKeys.slice(0, 8).forEach(key => {
+                tableHTML += `<th>${key.replace(/_/g, ' ').toUpperCase()}</th>`;
+            });
+            tableHTML += '</tr></thead><tbody>';
+            
+            previewData.forEach(row => {
+                tableHTML += '<tr>';
+                allKeys.slice(0, 8).forEach(key => {
+                    let value = row[key] || '';
+                    if (typeof value === 'string' && value.length > 30) {
+                        value = value.substring(0, 30) + '...';
+                    }
+                    tableHTML += `<td>${value}</td>`;
+                });
+                tableHTML += '</tr>';
+            });
+            
+            tableHTML += '</tbody>';
+            previewTable.innerHTML = tableHTML;
+            
+            // Show batch info
+            batchInfo.innerHTML = `
+                <div class="batch-stat">
+                    <div class="batch-stat-number">${data.length}</div>
+                    <div class="batch-stat-label">Total Records</div>
+                </div>
+                <div class="batch-stat">
+                    <div class="batch-stat-number">${allKeys.length}</div>
+                    <div class="batch-stat-label">Columns</div>
+                </div>
+                <div class="batch-stat">
+                    <div class="batch-stat-number">${Math.ceil(data.length / 1000)}</div>
+                    <div class="batch-stat-label">Batches (1k each)</div>
+                </div>
+                <div class="batch-stat">
+                    <div class="batch-stat-number">${currentProfile.name}</div>
+                    <div class="batch-stat-label">Profile</div>
+                </div>
+            `;
+            
+            previewSection.style.display = 'block';
+        }
+
+        // Import data handler
+        document.getElementById('importBtn').addEventListener('click', async function() {
+            if (!currentProfile) {
+                showStatus('Please select an import profile first', 'error');
+                return;
+            }
+
+            if (!supabase) {
+                showStatus('Supabase connection not initialized', 'error');
+                return;
+            }
+            
+            if (excelData.length === 0) {
+                showStatus('No data to import. Please select an Excel file first.', 'error');
+                return;
+            }
+
+            this.disabled = true;
+            showProgress(true);
+            
+            try {
+                // Step 1: Clear existing data
+                updateProgress(10, 'Clearing existing data...');
+                const { error: deleteError } = await supabase
+                    .from(currentProfile.tableName)
+                    .delete()
+                    .neq('id', 0); // Delete all records
+                
+                if (deleteError) {
+                    throw new Error('Failed to clear existing data: ' + deleteError.message);
+                }
+                
+                // Step 2: Insert new data in batches
+                const batchSize = 1000;
+                const totalBatches = Math.ceil(excelData.length / batchSize);
+                
+                for (let i = 0; i < totalBatches; i++) {
+                    const start = i * batchSize;
+                    const end = Math.min(start + batchSize, excelData.length);
+                    const batch = excelData.slice(start, end);
+                    
+                    updateProgress(
+                        10 + (80 * (i + 1) / totalBatches),
+                        `Importing batch ${i + 1} of ${totalBatches} (${start + 1}-${end} records)...`
+                    );
+                    
+                    const { error: insertError } = await supabase
+                        .from(currentProfile.tableName)
+                        .insert(batch);
+                    
+                    if (insertError) {
+                        throw new Error(`Failed to insert batch ${i + 1}: ` + insertError.message);
+                    }
+                    
+                    // Small delay to prevent overwhelming the database
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                
+                updateProgress(100, 'Import completed successfully!');
+                
+                showStatus(`🎉 Successfully imported ${excelData.length} records to "${currentProfile.name}" profile! All existing data was replaced with the new dataset.`, 'success');
+                
+            } catch (error) {
+                showStatus('❌ Import failed: ' + error.message, 'error');
+                console.error('Import error:', error);
+            } finally {
+                this.disabled = false;
+                setTimeout(() => showProgress(false), 2000);
+            }
+        });
+
+        // Password change functionality
+        document.getElementById('passwordForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            
+            if (currentPassword !== adminPassword) {
+                showStatus('Current password is incorrect', 'error');
+                return;
+            }
+            
+            if (newPassword !== confirmPassword) {
+                showStatus('New passwords do not match', 'error');
+                return;
+            }
+            
+            if (newPassword.length < 6) {
+                showStatus('New password must be at least 6 characters long', 'error');
+                return;
+            }
+            
+            adminPassword = newPassword;
+            localStorage.setItem('adminPassword', adminPassword);
+            this.reset();
+            showStatus('Password updated successfully', 'success');
+        });
+
+        // Update system information
+        function updateSystemInfo() {
+            const lastLogin = localStorage.getItem('lastLogin');
+            document.getElementById('lastLogin').textContent = lastLogin ? 
+                new Date(lastLogin).toLocaleString() : 'Never';
+            
+            const profiles = getProfiles();
+            document.getElementById('profilesCount').textContent = profiles.length;
+            
+            // Calculate storage usage
+            let totalSize = 0;
+            for (let key in localStorage) {
+                if (localStorage.hasOwnProperty(key)) {
+                    totalSize += localStorage[key].length;
+                }
+            }
+            document.getElementById('storageUsed').textContent = (totalSize / 1024).toFixed(2) + ' KB';
+        }
+
+        // Utility functions
+        function showProgress(show) {
+            document.getElementById('progressSection').style.display = show ? 'block' : 'none';
+            if (!show) {
+                document.getElementById('progressFill').style.width = '0%';
+            }
+        }
+
+        function updateProgress(percent, text) {
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressText').textContent = text;
+        }
+
+        function showStatus(message, type) {
+            const container = document.getElementById('statusContainer');
+            const statusDiv = document.createElement('div');
+            statusDiv.className = `status-message status-${type}`;
+            statusDiv.innerHTML = message;
+            
+            container.innerHTML = '';
+            container.appendChild(statusDiv);
+            
+            // Auto-hide success messages after 5 seconds
+            if (type === 'success') {
+                setTimeout(() => {
+                    if (statusDiv.parentNode) {
+                        statusDiv.remove();
+                    }
+                }, 5000);
+            }
+        }
+
+        // Auto-save form data
+        function autoSaveFormData() {
+            const form = document.getElementById('profileForm');
+            const formData = new FormData(form);
+            const data = {};
+            for (let [key, value] of formData.entries()) {
+                data[key] = value;
+            }
+            sessionStorage.setItem('profileFormDraft', JSON.stringify(data));
+        }
+
+        // Load saved form data
+        function loadSavedFormData() {
+            const saved = sessionStorage.getItem('profileFormDraft');
+            if (saved) {
+                const data = JSON.parse(saved);
+                Object.keys(data).forEach(key => {
+                    const element = document.getElementById(key);
+                    if (element) {
+                        element.value = data[key];
+                    }
+                });
+            }
+        }
+
+        // Add auto-save listeners
+        document.querySelectorAll('#profileForm input, #profileForm textarea, #profileForm select').forEach(element => {
+            element.addEventListener('input', autoSaveFormData);
+        });
+
+        // Clear draft on successful save
+        document.getElementById('profileForm').addEventListener('submit', function() {
+            sessionStorage.removeItem('profileFormDraft');
+        });
+
+        // Load draft on page load
+        setTimeout(loadSavedFormData, 100);
+    </script>
+</body>
+</html>
