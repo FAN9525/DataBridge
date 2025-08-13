@@ -592,10 +592,16 @@
                 </button>
 
                 <div class="progress-section" id="progressSection">
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="progressFill"></div>
-                    </div>
-                    <div id="progressText">Preparing import...</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div id="progressText">Preparing import...</div>
+                <div id="progressStats" class="profile-info" style="margin-top: 0.5rem;">
+                    <!-- ETA and throughput will appear here -->
+                </div>
+                <div style="margin-top: 0.75rem; display: flex; justify-content: flex-end;">
+                    <button id="cancelBtn" class="btn-danger" style="display:none; padding: 0.5rem 1rem;">Cancel Import</button>
+                </div>
                 </div>
 
                 <div id="statusContainer"></div>
@@ -644,6 +650,8 @@
         let supabase = null;
         let envLoaded = false;
         let editingProfileId = null;
+        let importCancelled = false;
+        let importStartTime = null;
 
         // Default admin password
         let adminPassword = 'P@ss100alone';
@@ -1082,10 +1090,12 @@
 
             this.disabled = true;
             showProgress(true);
+            importCancelled = false;
+            importStartTime = Date.now();
             
             try {
                 // Step 1: Clear existing data
-                updateProgress(10, 'Clearing existing data...');
+                updateProgress(10, 'Clearing existing data...', '');
                 const { error: deleteError } = await supabase
                     .from(currentProfile.tableName)
                     .delete()
@@ -1098,16 +1108,29 @@
                 // Step 2: Insert new data in batches
                 const batchSize = 1000;
                 const totalBatches = Math.ceil(excelData.length / batchSize);
+                let processed = 0;
+                let lastUpdateTime = Date.now();
                 
                 for (let i = 0; i < totalBatches; i++) {
+                    if (importCancelled) throw new Error('Import cancelled by user');
                     const start = i * batchSize;
                     const end = Math.min(start + batchSize, excelData.length);
                     const batch = excelData.slice(start, end);
                     
-                    updateProgress(
-                        10 + (80 * (i + 1) / totalBatches),
-                        `Importing batch ${i + 1} of ${totalBatches} (${start + 1}-${end} records)...`
-                    );
+                    const percent = 10 + (80 * (i + 1) / totalBatches);
+                    processed = end;
+                    const now = Date.now();
+                    const elapsedSec = (now - importStartTime) / 1000;
+                    const rate = processed / Math.max(elapsedSec, 0.001); // records/sec
+                    const remaining = Math.max(excelData.length - processed, 0);
+                    const etaSec = remaining / Math.max(rate, 0.001);
+                    const fmt = (s) => {
+                        const m = Math.floor(s / 60);
+                        const sec = Math.floor(s % 60);
+                        return `${m}m ${sec}s`;
+                    };
+                    const stats = `Processed ${processed}/${excelData.length} • ${rate.toFixed(1)} rec/s • ETA ${fmt(etaSec)}`;
+                    updateProgress(percent, `Importing batch ${i + 1} of ${totalBatches} (${start + 1}-${end} records)...`, stats);
                     
                     const { error: insertError } = await supabase
                         .from(currentProfile.tableName)
@@ -1121,7 +1144,7 @@
                     await new Promise(resolve => setTimeout(resolve, 100));
                 }
                 
-                updateProgress(100, 'Import completed successfully!');
+                updateProgress(100, 'Import completed successfully!', `Processed ${excelData.length}/${excelData.length} • ${(excelData.length/Math.max((Date.now()-importStartTime)/1000,0.001)).toFixed(1)} rec/s • ETA 0m 0s`);
                 
                 showStatus(`🎉 Successfully imported ${excelData.length} records to "${currentProfile.name}" profile! All existing data was replaced with the new dataset.`, 'success');
                 
@@ -1184,15 +1207,21 @@
 
         // Utility functions
         function showProgress(show) {
-            document.getElementById('progressSection').style.display = show ? 'block' : 'none';
+            const section = document.getElementById('progressSection');
+            section.style.display = show ? 'block' : 'none';
+            const cancelBtn = document.getElementById('cancelBtn');
+            cancelBtn.style.display = show ? 'inline-block' : 'none';
             if (!show) {
                 document.getElementById('progressFill').style.width = '0%';
+                document.getElementById('progressText').textContent = 'Preparing import...';
+                document.getElementById('progressStats').textContent = '';
             }
         }
 
-        function updateProgress(percent, text) {
+        function updateProgress(percent, text, stats) {
             document.getElementById('progressFill').style.width = percent + '%';
-            document.getElementById('progressText').textContent = text;
+            if (text) document.getElementById('progressText').textContent = text;
+            if (stats) document.getElementById('progressStats').textContent = stats;
         }
 
         function showStatus(message, type) {
@@ -1289,6 +1318,14 @@
                     addKnownTable(name);
                     document.getElementById('newTableName').value = '';
                     showStatus(`Added table "${name}" to list`, 'success');
+                });
+            }
+            const cancelBtn = document.getElementById('cancelBtn');
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', function() {
+                    importCancelled = true;
+                    this.disabled = true;
+                    updateProgress(undefined, 'Cancelling...');
                 });
             }
         });
