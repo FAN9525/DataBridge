@@ -1817,18 +1817,26 @@
 
 		function dp_downloadChangedXLSX(filename='changed_records.xlsx') {
 			if (!dp_compareChanged || !dp_compareChanged.length) return;
-			const ws = XLSX.utils.json_to_sheet(dp_compareChanged, { cellDates: false });
-			// Force all cells to be stored as text to prevent Excel auto-reformatting (e.g., dates)
+			// Convert known date columns to DD/MM/YYYY for export only
+			const dateHeaders = ['Original inception','Original inception date','Inception date','Expiry date','Review date','Birth Date'];
+			const rowsForExport = dp_compareChanged.map(r => {
+				const copy = { ...r };
+				dateHeaders.forEach(h => { if (h in copy && copy[h]!=null) copy[h] = dp_toDDMMYYYY(copy[h]); });
+				return copy;
+			});
+			const ws = XLSX.utils.json_to_sheet(rowsForExport, { cellDates: false, raw: false });
+			// Force text cells to avoid Excel auto-reformatting
 			Object.keys(ws).forEach(addr => {
 				if (addr[0] === '!') return;
 				const cell = ws[addr];
 				if (!cell) return;
 				cell.t = 's';
 				cell.z = '@';
+				if (typeof cell.v !== 'string') cell.v = String(cell.v ?? '');
 			});
 			const wb = XLSX.utils.book_new();
 			XLSX.utils.book_append_sheet(wb, ws, 'changed_records');
-			XLSX.writeFile(wb, filename);
+			XLSX.writeFile(wb, filename, { compression: true, bookSST: true });
 		}
 
 		function dp_downloadChangedCSV(filename='changed_records.csv') {
