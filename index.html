@@ -1726,6 +1726,28 @@
 			return s;
 		}
 
+		function dp_toDDMMYYYY(input) {
+			if (!input) return '';
+			const s = String(input).trim();
+			// If already DD/MM/YYYY
+			if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+			// If YYYY/MM/DD → convert
+			const m = s.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
+			if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+			// If MM/DD/YYYY → swap
+			const m2 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+			if (m2) return `${m2[2]}/${m2[1]}/${m2[3]}`;
+			// If M/D/YY or similar two-digit year
+			const m3 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+			if (m3) {
+				const currentYY = new Date().getFullYear() % 100;
+				const yy = parseInt(m3[3],10);
+				const yyyy = (yy <= currentYY) ? 2000 + yy : 1900 + yy;
+				return `${String(m3[2]).padStart(2,'0')}/${String(m3[1]).padStart(2,'0')}/${yyyy}`;
+			}
+			return s;
+		}
+
 		async function dp_readSpreadsheet(file) {
 			return new Promise((resolve, reject) => {
 				const name = (file.name || '').toLowerCase();
@@ -2081,7 +2103,7 @@
 				if (keys[21] in newRow && newRow[keys[21]]!=null) {
 					const header = String(keys[21]||'');
 					if (/^date\s*added$/i.test(header)) {
-						newRow[keys[21]] = dp_normalizeDateString(newRow[keys[21]], header);
+						newRow[keys[21]] = dp_toDDMMYYYY(newRow[keys[21]]);
 					}
 				}
 				out.push(newRow);
