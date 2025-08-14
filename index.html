@@ -1955,11 +1955,11 @@
 			Object.keys(ws).forEach(addr=>{ if(addr[0]!=='!'){ const cell=ws[addr]; if(cell){ cell.t='s'; cell.z='@'; if(typeof cell.v!=='string') cell.v = String(cell.v ?? ''); } } });
 			const wb = XLSX.utils.book_new();
 			XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-			XLSX.writeFile(wb, name);
+			XLSX.writeFile(wb, name, { compression: true, bookSST: true });
 		}
 		function dp2_downloadCSV(rows, name) {
 			const ws = XLSX.utils.json_to_sheet(rows);
-			const csv = XLSX.utils.sheet_to_csv(ws);
+			const csv = XLSX.utils.sheet_to_csv(ws, { strip: true, FS: ',', RS: '\n' });
 			const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement('a'); a.href=url; a.download=name; a.click();
