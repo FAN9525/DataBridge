@@ -1650,7 +1650,13 @@
 			const cols = columns.slice(0, 12); // cap columns for preview
 			let html = '<thead><tr>' + cols.map(c => `<th>${c.replace(/_/g,' ').toUpperCase()}</th>`).join('') + '</tr></thead><tbody>';
 			rows.slice(0, 50).forEach(r => {
-				html += '<tr>' + cols.map(c => `<td>${(r[c] ?? '').toString().slice(0, 60)}</td>`).join('') + '</tr>';
+				const cells = cols.map(c => {
+					const v = r[c];
+					// Render as text, not as date/number, to match display
+					let text = v == null ? '' : String(v);
+					return `<td style="white-space:nowrap;">${text}</td>`;
+				});
+				html += '<tr>' + cells.join('') + '</tr>';
 			});
 			html += '</tbody>';
 			table.innerHTML = html;
@@ -1676,7 +1682,15 @@
 
 		function dp_downloadChangedXLSX(filename='changed_records.xlsx') {
 			if (!dp_compareChanged || !dp_compareChanged.length) return;
-			const ws = XLSX.utils.json_to_sheet(dp_compareChanged);
+			const ws = XLSX.utils.json_to_sheet(dp_compareChanged, { cellDates: false });
+			// Force all cells to be stored as text to prevent Excel auto-reformatting (e.g., dates)
+			Object.keys(ws).forEach(addr => {
+				if (addr[0] === '!') return;
+				const cell = ws[addr];
+				if (!cell) return;
+				cell.t = 's';
+				cell.z = '@';
+			});
 			const wb = XLSX.utils.book_new();
 			XLSX.utils.book_append_sheet(wb, ws, 'changed_records');
 			XLSX.writeFile(wb, filename);
