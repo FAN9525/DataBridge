@@ -724,6 +724,15 @@
                         <div class="form-section" id="step1" data-step-panel="1">
                             <h3>STEP 1: Compare Clients</h3>
                             <p class="profile-info">Upload and compare client sources. Configure match rules and view diffs.</p>
+                            <div class="form-section" style="margin-top:1rem;">
+                                <h4>About this step</h4>
+                                <p class="profile-info">Select your Old and New datasets. We detect records in New that are not present in Old based on all columns. You can export the differences for import downstream.</p>
+                                <div class="form-group" style="margin-top:0.75rem;">
+                                    <label for="dp_notes_1">Notes (visible to other users on this browser):</label>
+                                    <textarea id="dp_notes_1" data-step-notes="1" rows="3" placeholder="Add notes, assumptions, mapping hints, etc."></textarea>
+                                    <div class="profile-info" id="dp_notes_status_1" style="margin-top:0.25rem;"></div>
+                                </div>
+                            </div>
                             <div style="display:flex; gap:1rem; flex-wrap:wrap;">
                                 <label class="file-input-wrapper">
                                     Old
@@ -746,24 +755,60 @@
                         <div class="form-section hidden" id="step2" data-step-panel="2">
                             <h3>STEP 2: Client & Policy Import</h3>
                             <p class="profile-info">Prepare and stage client and policy master data for import.</p>
+                            <div class="form-section" style="margin-top:1rem;">
+                                <h4>About this step</h4>
+                                <p class="profile-info">Map and validate client and policy records before importing into Supabase tables.</p>
+                                <div class="form-group" style="margin-top:0.75rem;">
+                                    <label for="dp_notes_2">Notes:</label>
+                                    <textarea id="dp_notes_2" data-step-notes="2" rows="3" placeholder="Add notes for Client/Policy import."></textarea>
+                                    <div class="profile-info" id="dp_notes_status_2" style="margin-top:0.25rem;"></div>
+                                </div>
+                            </div>
                             <div id="dp_step2Container"></div>
                         </div>
 
                         <div class="form-section hidden" id="step3" data-step-panel="3">
                             <h3>STEP 3: Policy Items Import</h3>
                             <p class="profile-info">Map and validate policy item lines before import.</p>
+                            <div class="form-section" style="margin-top:1rem;">
+                                <h4>About this step</h4>
+                                <p class="profile-info">Validate item-level rows, ensure required columns are present, and confirm mappings.</p>
+                                <div class="form-group" style="margin-top:0.75rem;">
+                                    <label for="dp_notes_3">Notes:</label>
+                                    <textarea id="dp_notes_3" data-step-notes="3" rows="3" placeholder="Add notes for Policy Items."></textarea>
+                                    <div class="profile-info" id="dp_notes_status_3" style="margin-top:0.25rem;"></div>
+                                </div>
+                            </div>
                             <div id="dp_step3Container"></div>
                         </div>
 
                         <div class="form-section hidden" id="step4" data-step-panel="4">
                             <h3>STEP 4: Client Bank</h3>
                             <p class="profile-info">Prepare client banking details with validation.</p>
+                            <div class="form-section" style="margin-top:1rem;">
+                                <h4>About this step</h4>
+                                <p class="profile-info">Check banking data formats and cleanse values prior to import.</p>
+                                <div class="form-group" style="margin-top:0.75rem;">
+                                    <label for="dp_notes_4">Notes:</label>
+                                    <textarea id="dp_notes_4" data-step-notes="4" rows="3" placeholder="Add notes for Client Bank."></textarea>
+                                    <div class="profile-info" id="dp_notes_status_4" style="margin-top:0.25rem;"></div>
+                                </div>
+                            </div>
                             <div id="dp_step4Container"></div>
                         </div>
 
                         <div class="form-section hidden" id="step5" data-step-panel="5">
                             <h3>STEP 5: Claims Information</h3>
                             <p class="profile-info">Aggregate and validate claims history.</p>
+                            <div class="form-section" style="margin-top:1rem;">
+                                <h4>About this step</h4>
+                                <p class="profile-info">Consolidate claims datasets and identify discrepancies.</p>
+                                <div class="form-group" style="margin-top:0.75rem;">
+                                    <label for="dp_notes_5">Notes:</label>
+                                    <textarea id="dp_notes_5" data-step-notes="5" rows="3" placeholder="Add notes for Claims Information."></textarea>
+                                    <div class="profile-info" id="dp_notes_status_5" style="margin-top:0.25rem;"></div>
+                                </div>
+                            </div>
                             <div id="dp_step5Container"></div>
                         </div>
                     </div>
@@ -1486,6 +1531,26 @@
             updateDataPrepStepUI();
         }
 
+        // Persist notes per step in localStorage so other users on this browser can see them
+        function dp_loadNotes(step) {
+            try { return localStorage.getItem(`dp_notes_${step}`) || ''; } catch (_) { return ''; }
+        }
+        function dp_saveNotes(step, text) {
+            try { localStorage.setItem(`dp_notes_${step}`, text || ''); } catch (_) {}
+        }
+        function dp_wireNotes() {
+            const textareas = document.querySelectorAll('[data-step-notes]');
+            textareas.forEach(ta => {
+                const step = ta.getAttribute('data-step-notes');
+                ta.value = dp_loadNotes(step);
+                ta.addEventListener('input', () => {
+                    dp_saveNotes(step, ta.value);
+                    const status = document.getElementById(`dp_notes_status_${step}`);
+                    if (status) status.textContent = `Saved ${new Date().toLocaleTimeString()}`;
+                });
+            });
+        }
+
 		// ===== Data Prep STEP 1: Compare Clients =====
 		let dp_compareChanged = [];
 		function dp_showStatus(message, type='info') {
@@ -1789,6 +1854,7 @@
             }
             // Data Prep nav
             setupDataPrepNav();
+            dp_wireNotes();
         });
 
         // Supabase env loader
