@@ -1606,7 +1606,7 @@
 						const raw = row[c];
 						val = raw == null ? '' : String(raw);
 					}
-					obj[header] = dp_isDateHeader(header) ? dp_normalizeDateString(val) : val;
+					obj[header] = dp_isDateHeader(header) ? dp_normalizeDateString(val, header) : val;
 				}
 				out.push(obj);
 			}
@@ -1625,7 +1625,7 @@
 			}
 			return false;
 		}
-		function dp_normalizeDateString(input) {
+		function dp_normalizeDateString(input, header) {
 			if (input == null) return '';
 			let s = String(input).trim();
 			if (!s) return '';
@@ -1653,6 +1653,12 @@
 					} else { // ambiguous -> assume MM/DD/YYYY as per screenshot
 						mm = a; dd = b;
 					}
+					// If birth date and future year, roll back a century
+					const yNum = parseInt(yyyy, 10);
+					const currentYear = new Date().getFullYear();
+					if (header && /birth/i.test(header) && yNum > currentYear) {
+						yyyy = String(yNum - 100);
+					}
 					return `${yyyy}/${String(mm).padStart(2,'0')}/${String(dd).padStart(2,'0')}`;
 				}
 				return s;
@@ -1661,7 +1667,15 @@
 			if (c.length === 2) {
 				const yy = parseInt(c,10);
 				if (!isNaN(yy)) {
-					const yyyy = 2000 + yy; // assume 20YY
+					const currentYY = new Date().getFullYear() % 100;
+					let yyyy;
+					if (header && /birth/i.test(header)) {
+						// Prefer past: if yy > currentYY -> 19yy else 20yy
+						yyyy = (yy > currentYY) ? 1900 + yy : 2000 + yy;
+					} else {
+						// General pivot window
+						yyyy = (yy <= currentYY) ? 2000 + yy : 1900 + yy;
+					}
 					return `${String(a).padStart(2,'0')}/${String(b).padStart(2,'0')}/${String(yyyy)}`;
 				}
 			}
