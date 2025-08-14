@@ -2078,22 +2078,16 @@
 		function dp3_phase2_exportAll(cleanRows) {
 			const currentDate = dp2_nowDate();
 			const itemsName = `Policy_Items_API_${currentDate}.xlsx`;
-			dp2_downloadXLSX(cleanRows, itemsName);
-			return itemsName;
+			return { rows: cleanRows, name: itemsName };
 		}
 		function dp3_phase3_sections(cleanRows) {
 			const currentDate = dp2_nowDate();
 			const selectedCols = ["Policy Number","Client Name","Policy Section","Product","Status"];
-			const filtered = cleanRows.map(r=>{
-				const o={}; selectedCols.forEach(c=>o[c]=r[c]); return o;
-			}).filter(r=> r["Status"] !== 'Cancelled');
-			// unique rows
-			const seen=new Set();
-			const uniq=[];
-			for(const r of filtered){ const key=JSON.stringify(r); if(!seen.has(key)){ seen.add(key); uniq.push(r);} }
+			const filtered = cleanRows.map(r=>{ const o={}; selectedCols.forEach(c=>o[c]=r[c]); return o; })
+				.filter(r=> r["Status"] !== 'Cancelled');
+			const seen=new Set(); const uniq=[]; for(const r of filtered){ const key=JSON.stringify(r); if(!seen.has(key)){ seen.add(key); uniq.push(r);} }
 			const name = `Policy_Sections_${currentDate}.xlsx`;
-			dp2_downloadXLSX(uniq, name);
-			return name;
+			return { rows: uniq, name };
 		}
 		function dp3_downloadErrors(errors) {
 			if (!errors.length) return;
@@ -2113,10 +2107,10 @@
 					document.getElementById('dp3_outputs').style.display='block';
 					document.getElementById('dp3_dl_errors').onclick=()=>dp3_downloadErrors(errors);
 					document.getElementById('dp3_dl_cleaned').onclick=()=>dp2_downloadXLSX(clean, 'OpenDoorPolicyData.cleaned.xlsx');
-					const itemsName = dp3_phase2_exportAll(clean);
-					document.getElementById('dp3_dl_items').onclick=()=>dp2_downloadXLSX(clean, itemsName);
-					const sectionsName = dp3_phase3_sections(clean);
-					document.getElementById('dp3_dl_sections').onclick=()=>dp2_downloadXLSX(clean.map(r=>{const o={};["Policy Number","Client Name","Policy Section","Product","Status"].forEach(c=>o[c]=r[c]);return o;}).filter(r=>r["Status"]!=='Cancelled').filter((r=>{const key=JSON.stringify(r); if(!dp3_downloadSectionsSeen) dp3_downloadSectionsSeen=new Set(); if(dp3_downloadSectionsSeen.has(key)) return false; dp3_downloadSectionsSeen.add(key); return true;})), sectionsName);
+					const items = dp3_phase2_exportAll(clean);
+					document.getElementById('dp3_dl_items').onclick=()=>dp2_downloadXLSX(items.rows, items.name);
+					const sections = dp3_phase3_sections(clean);
+					document.getElementById('dp3_dl_sections').onclick=()=>dp2_downloadXLSX(sections.rows, sections.name);
 					dp3_show(`Cleaned ${clean.length} rows. Errors: ${errors.length}.`, 'success');
 				}catch(err){
 					dp3_show('Processing failed: '+(err&&err.message?err.message:err),'error');
