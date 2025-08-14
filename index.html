@@ -1937,7 +1937,8 @@
 		}
 		function dp2_downloadXLSX(rows, name) {
 			const ws = XLSX.utils.json_to_sheet(rows);
-			Object.keys(ws).forEach(addr=>{ if(addr[0]!=='!'){ ws[addr].t='s'; ws[addr].z='@'; } });
+			// Force text cells (avoid Excel auto-format, especially dates)
+			Object.keys(ws).forEach(addr=>{ if(addr[0]!=='!'){ const cell=ws[addr]; if(cell){ cell.t='s'; cell.z='@'; } } });
 			const wb = XLSX.utils.book_new();
 			XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
 			XLSX.writeFile(wb, name);
@@ -2062,12 +2063,7 @@
 					const num = parseFloat(String(newRow[keys[20]]).replace(/,/g,''));
 					newRow[keys[20]] = Number.isFinite(num) ? num.toFixed(2) : newRow[keys[20]];
 				}
-				// Column V to DD/MM/YYYY if looks like a date
-				if (keys[21] in newRow && newRow[keys[21]]!=null) {
-					const s = String(newRow[keys[21]]).replace(/-/g,'/');
-					const m = s.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
-					if (m) newRow[keys[21]] = `${m[3]}/${m[2]}/${m[1]}`;
-				}
+				// Column V: keep displayed text as-is (no date reformatting)
 				out.push(newRow);
 			}
 			return { rows: out, errors };
