@@ -1697,33 +1697,33 @@
 					} else { // ambiguous -> assume MM/DD/YYYY as per screenshot
 						mm = a; dd = b;
 					}
-					// If birth date and future year, roll back a century
-					const yNum = parseInt(yyyy, 10);
-					const currentYear = new Date().getFullYear();
-					if (header && /birth/i.test(header) && yNum > currentYear) {
-						yyyy = String(yNum - 100);
-					}
+                    // If birth date and future year, roll back a century
+                    const yNum = parseInt(yyyy, 10);
+                    const currentYear = new Date().getFullYear();
+                    if (header && /birth/i.test(header) && yNum > currentYear) {
+                        yyyy = String(yNum - 100);
+                    }
                     return `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yyyy}`;
 				}
 				return s;
 			}
 			// If two-digit year at end (e.g., 8/1/25) assume MM/DD/20YY
-			if (c.length === 2) {
-				const yy = parseInt(c,10);
-				if (!isNaN(yy)) {
-					const currentYY = new Date().getFullYear() % 100;
-					let yyyy;
-					if (header && /birth/i.test(header)) {
-						// Prefer past: if yy > currentYY -> 19yy else 20yy
-						yyyy = (yy > currentYY) ? 1900 + yy : 2000 + yy;
-					} else {
-						// General pivot window
-						yyyy = (yy <= currentYY) ? 2000 + yy : 1900 + yy;
-					}
+            if (c.length === 2) {
+                const yy = parseInt(c,10);
+                if (!isNaN(yy)) {
+                    const currentYY = new Date().getFullYear() % 100;
+                    let yyyy;
+                    if (header && /birth/i.test(header)) {
+                        // Birth dates lean to past century if beyond current YY
+                        yyyy = (yy > currentYY) ? 1900 + yy : 2000 + yy;
+                    } else {
+                        // Non-birth dates lean to 20YY by default; use 19YY only for 50-99
+                        yyyy = (yy >= 50) ? 1900 + yy : 2000 + yy;
+                    }
                     // a=MM, b=DD -> return DD/MM/YYYY
                     return `${String(b).padStart(2,'0')}/${String(a).padStart(2,'0')}/${String(yyyy)}`;
-				}
-			}
+                }
+            }
 			return s;
 		}
 
