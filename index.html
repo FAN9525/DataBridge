@@ -1486,6 +1486,178 @@
             updateDataPrepStepUI();
         }
 
+		// ===== Data Prep STEP 1: Compare Clients =====
+		let dp_compareChanged = [];
+		function dp_showStatus(message, type='info') {
+			const container = document.getElementById('dp_comparePreview');
+			if (!container) return;
+			container.style.display = 'block';
+			const statusHtml = `<div class="status-message status-${type}">${message}</div>`;
+			container.insertAdjacentHTML('afterbegin', statusHtml);
+			setTimeout(() => {
+				const n = container.querySelector('.status-message');
+				if (n) n.remove();
+			}, 4000);
+		}
+
+		function dp_normalizeValue(value) {
+			if (value === undefined || value === null) return '';
+			if (typeof value === 'string') return value.trim();
+			return value;
+		}
+
+		function dp_rowSignature(row, columns) {
+			// Build a stable signature using selected columns in order
+			const parts = columns.map(k => `${k}=${JSON.stringify(dp_normalizeValue(row[k]))}`);
+			return parts.join('|');
+		}
+
+		function dp_equalColumnSets(colsA, colsB) {
+			if (colsA.length !== colsB.length) return false;
+			const a = [...colsA].sort();
+			const b = [...colsB].sort();
+			for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+			return true;
+		}
+
+		async function dp_readSpreadsheet(file) {
+			return new Promise((resolve, reject) => {
+				const name = (file.name || '').toLowerCase();
+				const reader = new FileReader();
+				reader.onerror = () => reject(new Error('Failed to read file: ' + file.name));
+				if (name.endsWith('.csv')) {
+					reader.onload = e => {
+						try {
+							const text = e.target.result;
+							const wb = XLSX.read(text, { type: 'string' });
+							const ws = wb.Sheets[wb.SheetNames[0]];
+							const json = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
+							resolve(json);
+						} catch (err) { reject(err); }
+					};
+					reader.readAsText(file);
+				} else {
+					reader.onload = e => {
+						try {
+							const data = new Uint8Array(e.target.result);
+							const wb = XLSX.read(data, { type: 'array' });
+							const ws = wb.Sheets[wb.SheetNames[0]];
+							const json = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
+							resolve(json);
+						} catch (err) { reject(err); }
+					};
+					reader.readAsArrayBuffer(file);
+				}
+			});
+		}
+
+		function dp_renderCompareTable(rows, columns) {
+			const table = document.getElementById('dp_compareTable');
+			if (!table) return;
+			const cols = columns.slice(0, 12); // cap columns for preview
+			let html = '<thead><tr>' + cols.map(c => `<th>${c.replace(/_/g,' ').toUpperCase()}</th>`).join('') + '</tr></thead><tbody>';
+			rows.slice(0, 50).forEach(r => {
+				html += '<tr>' + cols.map(c => `<td>${(r[c] ?? '').toString().slice(0, 60)}</td>`).join('') + '</tr>';
+			});
+			html += '</tbody>';
+			table.innerHTML = html;
+			const preview = document.getElementById('dp_comparePreview');
+			if (preview) preview.style.display = 'block';
+		}
+
+		function dp_renderCompareStats(oldCount, newCount, changedCount) {
+			let stats = document.getElementById('dp_compareStats');
+			if (!stats) {
+				const container = document.getElementById('step1');
+				stats = document.createElement('div');
+				stats.id = 'dp_compareStats';
+				stats.className = 'batch-info';
+				container.appendChild(stats);
+			}
+			stats.innerHTML = `
+				<div class="batch-stat"><div class="batch-stat-number">${oldCount}</div><div class="batch-stat-label">Old Rows</div></div>
+				<div class="batch-stat"><div class="batch-stat-number">${newCount}</div><div class="batch-stat-label">New Rows</div></div>
+				<div class="batch-stat"><div class="batch-stat-number">${changedCount}</div><div class="batch-stat-label">Changes</div></div>
+			`;
+		}
+
+		function dp_downloadChangedXLSX(filename='changed_records.xlsx') {
+			if (!dp_compareChanged || !dp_compareChanged.length) return;
+			const ws = XLSX.utils.json_to_sheet(dp_compareChanged);
+			const wb = XLSX.utils.book_new();
+			XLSX.utils.book_append_sheet(wb, ws, 'changed_records');
+			XLSX.writeFile(wb, filename);
+		}
+
+		function dp_downloadChangedCSV(filename='changed_records.csv') {
+			if (!dp_compareChanged || !dp_compareChanged.length) return;
+			const ws = XLSX.utils.json_to_sheet(dp_compareChanged);
+			const csv = XLSX.utils.sheet_to_csv(ws);
+			const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = filename;
+			a.click();
+			setTimeout(() => URL.revokeObjectURL(url), 1000);
+		}
+
+		function dp_wireStep1() {
+			const btn = document.getElementById('dp_compareBtn');
+			if (!btn || btn.__wired) return;
+			btn.__wired = true;
+			btn.addEventListener('click', async () => {
+				const fileA = document.getElementById('dp_sourceA').files[0];
+				const fileB = document.getElementById('dp_sourceB').files[0];
+				if (!fileA || !fileB) { dp_showStatus('Please select both Source A and Source B files.', 'error'); return; }
+				btn.disabled = true;
+				try {
+					const [oldRows, newRows] = await Promise.all([dp_readSpreadsheet(fileA), dp_readSpreadsheet(fileB)]);
+					if (!oldRows.length || !newRows.length) { dp_showStatus('One or both files seem to have no data rows.', 'error'); return; }
+					const colsOld = Object.keys(oldRows[0] || {});
+					const colsNew = Object.keys(newRows[0] || {});
+					if (!dp_equalColumnSets(colsOld, colsNew)) {
+						dp_showStatus('The columns of the two sheets do not match. Please ensure identical headers.', 'error');
+						return;
+					}
+					// Build set of old signatures
+					const keyCols = colsOld; // use all columns
+					const oldSet = new Set(oldRows.map(r => dp_rowSignature(r, keyCols)));
+					dp_compareChanged = newRows.filter(r => !oldSet.has(dp_rowSignature(r, keyCols)));
+					dp_renderCompareTable(dp_compareChanged, keyCols);
+					dp_renderCompareStats(oldRows.length, newRows.length, dp_compareChanged.length);
+					// Add/download buttons if not present
+					let bar = document.getElementById('dp_compareActions');
+					if (!bar) {
+						bar = document.createElement('div');
+						bar.id = 'dp_compareActions';
+						bar.style.marginTop = '0.75rem';
+						document.getElementById('step1').appendChild(bar);
+					}
+					bar.innerHTML = '<button class="btn-success" id="dp_dl_xlsx" style="width:auto; margin-right:0.5rem;">Download XLSX</button>'+
+						'<button class="btn-primary" id="dp_dl_csv" style="width:auto;">Download CSV</button>';
+					document.getElementById('dp_dl_xlsx').onclick = () => dp_downloadChangedXLSX('mmxclientpolicies.xlsx');
+					document.getElementById('dp_dl_csv').onclick = () => dp_downloadChangedCSV('mmxclientpolicies.csv');
+				} catch (err) {
+					dp_showStatus('Compare failed: ' + (err && err.message ? err.message : err), 'error');
+				} finally {
+					btn.disabled = false;
+				}
+			});
+			// Show chosen filenames
+			['dp_sourceA','dp_sourceB'].forEach(id => {
+				const el = document.getElementById(id);
+				if (!el) return;
+				el.addEventListener('change', () => {
+					if (!el.files || !el.files[0]) return;
+					dp_showStatus(`${id === 'dp_sourceA' ? 'Source A' : 'Source B'}: ${el.files[0].name}`, 'info');
+				});
+			});
+		}
+
+		// Wire when page loads and also when switching to Data Prep
+		document.addEventListener('DOMContentLoaded', dp_wireStep1);
+
         function showStatus(message, type) {
             const container = document.getElementById('statusContainer');
             const statusDiv = document.createElement('div');
