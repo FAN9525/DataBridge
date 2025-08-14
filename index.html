@@ -795,7 +795,22 @@
                                     <div class="profile-info" id="dp_notes_status_3" style="margin-top:0.25rem;"></div>
                                 </div>
                             </div>
-                            <div id="dp_step3Container"></div>
+                            <div id="dp_step3Container">
+                                <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:center;">
+                                    <label class="file-input-wrapper">
+                                        Upload OpenDoorPolicyData.xlsx
+                                        <input type="file" id="dp3_inputFile" accept=".xlsx,.xls,.csv">
+                                    </label>
+                                    <button class="btn-success" id="dp3_processBtn" style="width:auto;">Process</button>
+                                </div>
+                                <div class="batch-info" id="dp3_stats" style="margin-top:0.75rem;"></div>
+                                <div id="dp3_outputs" style="margin-top:0.75rem; display:none;">
+                                    <button class="btn-primary" id="dp3_dl_errors" style="width:auto; margin-right:0.5rem;">Download errors.xlsx</button>
+                                    <button class="btn-success" id="dp3_dl_cleaned" style="width:auto; margin-right:0.5rem;">Download Cleaned Data</button>
+                                    <button class="btn-success" id="dp3_dl_items" style="width:auto; margin-right:0.5rem;">Download Policy_Items_API</button>
+                                    <button class="btn-primary" id="dp3_dl_sections" style="width:auto;">Download Policy_Sections</button>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="form-section hidden" id="step4" data-step-panel="4">
@@ -2001,6 +2016,112 @@
 			}
 		}
 		document.addEventListener('DOMContentLoaded', dp2_wire);
+
+		// ===== Data Prep STEP 3: OpenDoorPolicyData processing =====
+		function dp3_show(message, type='info') {
+			const el = document.getElementById('dp3_stats');
+			if (!el) return;
+			el.innerHTML = `<div class="status-message status-${type}">${message}</div>`;
+		}
+		async function dp3_readInput() {
+			const file = document.getElementById('dp3_inputFile').files[0];
+			if (!file) return null;
+			const name = (file.name||'').toLowerCase();
+			return new Promise((resolve,reject)=>{
+				const reader = new FileReader();
+				reader.onerror=()=>reject(new Error('Failed to read file: '+file.name));
+				if (name.endsWith('.csv')) {
+					reader.onload=e=>{ try{ const wb=XLSX.read(e.target.result,{type:'string'}); const ws=wb.Sheets[wb.SheetNames[0]]; resolve({ rows: dp_sheetToDisplayJson(ws), headers: Object.keys(dp_sheetToDisplayJson(ws)[0]||{}) }); }catch(err){reject(err);} };
+					reader.readAsText(file);
+				} else {
+					reader.onload=e=>{ try{ const data=new Uint8Array(e.target.result); const wb=XLSX.read(data,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]]; const rows=dp_sheetToDisplayJson(ws); resolve({ rows, headers: Object.keys(rows[0]||{}) }); }catch(err){reject(err);} };
+					reader.readAsArrayBuffer(file);
+				}
+			});
+		}
+		function dp3_phase1_filterAndFormat(inputRows, headers) {
+			const errors = [];
+			const out = [];
+			// Map column letters to index by headers where possible; we approximate using positions
+			// Col A -> index 0, Col N -> index 13, Col D -> index 3, Col G -> index 6, Col U -> 20, Col V -> 21
+			const keys = headers;
+			const get = (row, idx)=> row[keys[idx]];
+			for (const r of inputRows) {
+				const colA = get(r,0);
+				const colN = get(r,13);
+				if (!colA || !colN) { errors.push(r); continue; }
+				// Only 'Guardrisk' in col D; normalize to full name
+				let colD = get(r,3);
+				if (colD !== 'Guardrisk' && colD !== 'Guardrisk Insurance Company') { continue; }
+				const newRow = { ...r };
+				newRow[keys[3]] = 'Guardrisk Insurance Company';
+				// Column G number no decimals -> leave text as-is; ensure digits only
+				if (keys[6] in newRow && newRow[keys[6]]!=null) newRow[keys[6]] = String(newRow[keys[6]]).replace(/\D+/g,'');
+				// Column U two decimals
+				if (keys[20] in newRow && newRow[keys[20]]!=null) {
+					const num = parseFloat(String(newRow[keys[20]]).replace(/,/g,''));
+					newRow[keys[20]] = Number.isFinite(num) ? num.toFixed(2) : newRow[keys[20]];
+				}
+				// Column V to DD/MM/YYYY if looks like a date
+				if (keys[21] in newRow && newRow[keys[21]]!=null) {
+					const s = String(newRow[keys[21]]).replace(/-/g,'/');
+					const m = s.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
+					if (m) newRow[keys[21]] = `${m[3]}/${m[2]}/${m[1]}`;
+				}
+				out.push(newRow);
+			}
+			return { rows: out, errors };
+		}
+		function dp3_phase2_exportAll(cleanRows) {
+			const currentDate = dp2_nowDate();
+			const itemsName = `Policy_Items_API_${currentDate}.xlsx`;
+			dp2_downloadXLSX(cleanRows, itemsName);
+			return itemsName;
+		}
+		function dp3_phase3_sections(cleanRows) {
+			const currentDate = dp2_nowDate();
+			const selectedCols = ["Policy Number","Client Name","Policy Section","Product","Status"];
+			const filtered = cleanRows.map(r=>{
+				const o={}; selectedCols.forEach(c=>o[c]=r[c]); return o;
+			}).filter(r=> r["Status"] !== 'Cancelled');
+			// unique rows
+			const seen=new Set();
+			const uniq=[];
+			for(const r of filtered){ const key=JSON.stringify(r); if(!seen.has(key)){ seen.add(key); uniq.push(r);} }
+			const name = `Policy_Sections_${currentDate}.xlsx`;
+			dp2_downloadXLSX(uniq, name);
+			return name;
+		}
+		function dp3_downloadErrors(errors) {
+			if (!errors.length) return;
+			const name = 'errors.xlsx';
+			dp2_downloadXLSX(errors, name);
+		}
+		function dp3_wire() {
+			const btn = document.getElementById('dp3_processBtn');
+			if (!btn || btn.__wired) return; btn.__wired=true;
+			btn.addEventListener('click', async ()=>{
+				try{
+					dp3_show('Reading file...','info');
+					const input = await dp3_readInput();
+					if (!input || !input.rows || !input.rows.length) { dp3_show('Please upload a valid OpenDoorPolicyData file.','error'); return; }
+					dp3_show('Cleaning and formatting...','info');
+					const { rows: clean, errors } = dp3_phase1_filterAndFormat(input.rows, input.headers);
+					document.getElementById('dp3_outputs').style.display='block';
+					document.getElementById('dp3_dl_errors').onclick=()=>dp3_downloadErrors(errors);
+					document.getElementById('dp3_dl_cleaned').onclick=()=>dp2_downloadXLSX(clean, 'OpenDoorPolicyData.cleaned.xlsx');
+					const itemsName = dp3_phase2_exportAll(clean);
+					document.getElementById('dp3_dl_items').onclick=()=>dp2_downloadXLSX(clean, itemsName);
+					const sectionsName = dp3_phase3_sections(clean);
+					document.getElementById('dp3_dl_sections').onclick=()=>dp2_downloadXLSX(clean.map(r=>{const o={};["Policy Number","Client Name","Policy Section","Product","Status"].forEach(c=>o[c]=r[c]);return o;}).filter(r=>r["Status"]!=='Cancelled').filter((r=>{const key=JSON.stringify(r); if(!dp3_downloadSectionsSeen) dp3_downloadSectionsSeen=new Set(); if(dp3_downloadSectionsSeen.has(key)) return false; dp3_downloadSectionsSeen.add(key); return true;})), sectionsName);
+					dp3_show(`Cleaned ${clean.length} rows. Errors: ${errors.length}.`, 'success');
+				}catch(err){
+					dp3_show('Processing failed: '+(err&&err.message?err.message:err),'error');
+				}
+			});
+		}
+		let dp3_downloadSectionsSeen;
+		document.addEventListener('DOMContentLoaded', dp3_wire);
 
         function showStatus(message, type) {
             const container = document.getElementById('statusContainer');
