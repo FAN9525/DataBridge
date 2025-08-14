@@ -567,7 +567,7 @@
                                 <div style="display:flex; gap:0.5rem; align-items:center; margin-top:0.5rem;">
                                     <input type="text" id="newTableName" placeholder="Add table name" style="flex:1">
                                     <button type="button" class="btn-small" id="addTableBtn">Add</button>
-                                </div>
+                            </div>
                             </div>
                         </div>
                         <div class="form-group">
@@ -632,10 +632,10 @@
                 </button>
 
                 <div class="progress-section" id="progressSection">
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill"></div>
-                </div>
-                <div id="progressText">Preparing import...</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div id="progressText">Preparing import...</div>
                 <div id="progressStats" class="profile-info" style="margin-top: 0.5rem;">
                     <!-- ETA and throughput will appear here -->
                 </div>
@@ -764,7 +764,23 @@
                                     <div class="profile-info" id="dp_notes_status_2" style="margin-top:0.25rem;"></div>
                                 </div>
                             </div>
-                            <div id="dp_step2Container"></div>
+                            <div id="dp_step2Container">
+                                <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:center;">
+                                    <label class="file-input-wrapper">
+                                        Upload mmxclientpolicies.xlsx
+                                        <input type="file" id="dp2_inputFile" accept=".xlsx,.xls,.csv">
+                                    </label>
+                                    <button class="btn-primary" id="dp2_useStep1Btn" style="width:auto;">Use Step 1 Differences</button>
+                                    <button class="btn-success" id="dp2_processBtn" style="width:auto;">Process</button>
+                                </div>
+                                <div class="batch-info" id="dp2_stats" style="margin-top:0.75rem;"></div>
+                                <div id="dp2_outputs" style="margin-top:0.75rem; display:none;">
+                                    <button class="btn-success" id="dp2_dl_client_xlsx" style="width:auto; margin-right:0.5rem;">Download Client Import (XLSX)</button>
+                                    <button class="btn-primary" id="dp2_dl_client_csv" style="width:auto; margin-right:0.5rem;">Download Client Import (CSV)</button>
+                                    <button class="btn-success" id="dp2_dl_policy_xlsx" style="width:auto; margin-right:0.5rem;">Download Policy Import (XLSX)</button>
+                                    <button class="btn-primary" id="dp2_dl_policy_csv" style="width:auto;">Download Policy Import (CSV)</button>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="form-section hidden" id="step3" data-step-panel="3">
@@ -1147,11 +1163,11 @@
                         headers.forEach((header, index) => {
                             if (!currentProfile.columnMapping[header]) return;
                             const targetKey = currentProfile.columnMapping[header];
-                            let value = row[index];
-
+                                let value = row[index];
+                                
                             // Normalize blanks to null for dates/numbers
                             if (['Date Added', 'Cancelation Date'].includes(header)) {
-                                value = convertExcelDate(value);
+                                    value = convertExcelDate(value);
                             } else if (['LR', 'Insured Value', 'Premium', 'Account Balance'].includes(header)) {
                                 if (value === null || value === undefined || value === '') {
                                     value = null;
@@ -1833,6 +1849,158 @@
 
 		// Wire when page loads and also when switching to Data Prep
 		document.addEventListener('DOMContentLoaded', dp_wireStep1);
+
+		// ===== Data Prep STEP 2: Client & Policy Import =====
+		let dp2_sourceRows = [];
+		function dp2_show(message, type='info') {
+			const el = document.getElementById('dp2_stats');
+			if (!el) return;
+			el.innerHTML = `<div class="status-message status-${type}">${message}</div>`;
+		}
+		async function dp2_readInput() {
+			const file = document.getElementById('dp2_inputFile').files[0];
+			if (!file) return null;
+			// Reuse STEP1 reader to preserve displayed text
+			const name = (file.name||'').toLowerCase();
+			return new Promise((resolve,reject)=>{
+				const reader = new FileReader();
+				reader.onerror = ()=>reject(new Error('Failed to read file: '+file.name));
+				if (name.endsWith('.csv')) {
+					reader.onload = e=>{
+						try{ const wb=XLSX.read(e.target.result,{type:'string'}); const ws=wb.Sheets[wb.SheetNames[0]]; resolve(dp_sheetToDisplayJson(ws)); }catch(err){reject(err);}
+					};
+					reader.readAsText(file);
+				} else {
+					reader.onload = e=>{
+						try{ const data=new Uint8Array(e.target.result); const wb=XLSX.read(data,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]]; resolve(dp_sheetToDisplayJson(ws)); }catch(err){reject(err);}
+					};
+					reader.readAsArrayBuffer(file);
+				}
+			});
+		}
+		function dp2_trimLeadingSpacesInColumnG(rows) {
+			// If a header exactly 'G' exists, trim; otherwise skip
+			if (!rows.length) return rows;
+			const headers = Object.keys(rows[0]);
+			if (!headers.includes('G')) return rows;
+			return rows.map(r=>({ ...r, G: (r.G!=null)? String(r.G).replace(/^\s+/,'') : r.G }));
+		}
+		function dp2_addRoleClient(rows) {
+			return rows.map(r=>({ ...r, Role: 'Client' }));
+		}
+		function dp2_addCombinedName(rows) {
+			return rows.map(r=>{
+				const initials = r['Initials'];
+				const surname = r['Surname'];
+				const combined = (initials && String(initials).trim()) ? `${initials} ${surname||''}`.trim() : (surname||'');
+				return { ...r, 'Combined Name': combined };
+			});
+		}
+		function dp2_addUsername(rows) {
+			return rows.map(r=>{
+				const policy = r['Policy Number'];
+				return { ...r, 'Username': (policy==null? '' : String(policy)) + '@adminfocus.co.za' };
+			});
+		}
+		function dp2_forceLeadingZeroInColumn(rows, header) {
+			if (!rows.length) return rows;
+			if (!Object.keys(rows[0]).includes(header)) return rows;
+			return rows.map(r=>{
+				let v = r[header];
+				if (v==null || v==='') return r;
+				v = String(v);
+				if (!v.startsWith('0')) v = '0'+v;
+				return { ...r, [header]: v };
+			});
+		}
+		function dp2_selectColumns(rows, columns) {
+			return rows.map(r=>{
+				const obj={};
+				columns.forEach(c=>{ obj[c]=r[c]; });
+				return obj;
+			});
+		}
+		function dp2_downloadXLSX(rows, name) {
+			const ws = XLSX.utils.json_to_sheet(rows);
+			Object.keys(ws).forEach(addr=>{ if(addr[0]!=='!'){ ws[addr].t='s'; ws[addr].z='@'; } });
+			const wb = XLSX.utils.book_new();
+			XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+			XLSX.writeFile(wb, name);
+		}
+		function dp2_downloadCSV(rows, name) {
+			const ws = XLSX.utils.json_to_sheet(rows);
+			const csv = XLSX.utils.sheet_to_csv(ws);
+			const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a'); a.href=url; a.download=name; a.click();
+			setTimeout(()=>URL.revokeObjectURL(url),1000);
+		}
+		function dp2_nowDate() {
+			const d = new Date();
+			const yyyy = d.getFullYear();
+			const mm = String(d.getMonth()+1).padStart(2,'0');
+			const dd = String(d.getDate()).padStart(2,'0');
+			return `${yyyy}-${mm}-${dd}`;
+		}
+		function dp2_wire() {
+			const useStep1Btn = document.getElementById('dp2_useStep1Btn');
+			if (useStep1Btn && !useStep1Btn.__wired) {
+				useStep1Btn.__wired=true;
+				useStep1Btn.addEventListener('click', ()=>{
+					if (!dp_compareChanged || !dp_compareChanged.length) { dp2_show('No Step 1 data present. Please run Step 1 or upload a file.', 'error'); return; }
+					dp2_sourceRows = [...dp_compareChanged];
+					dp2_show(`Loaded ${dp2_sourceRows.length} rows from Step 1 differences.`, 'success');
+				});
+			}
+			const processBtn = document.getElementById('dp2_processBtn');
+			if (processBtn && !processBtn.__wired) {
+				processBtn.__wired=true;
+				processBtn.addEventListener('click', async ()=>{
+					try{
+						if (!dp2_sourceRows.length) {
+							const rows = await dp2_readInput();
+							if (!rows || !rows.length) { dp2_show('Upload a valid mmxclientpolicies file or load from Step 1.', 'error'); return; }
+							dp2_sourceRows = rows;
+						}
+						// Phase 1: trim leading spaces in column 'G'
+						let rows = dp2_trimLeadingSpacesInColumnG(dp2_sourceRows);
+						// Phase 2: add Role
+						rows = dp2_addRoleClient(rows);
+						// Phase 3: Combined Name
+						rows = dp2_addCombinedName(rows);
+						// Phase 4: Username from Policy Number
+						rows = dp2_addUsername(rows);
+						// Phase 5: Ensure leading zero in column M (13th) if header present
+						const headers = Object.keys(rows[0]||{});
+						const headerM = headers[12]; // 0-based index 12 -> 13th column
+						if (headerM) rows = dp2_forceLeadingZeroInColumn(rows, headerM);
+						// Phase 6: Client Import file
+						const currentDate = dp2_nowDate();
+						const clientCols = ["Client No","Combined Name","Username","Email Address","Cell Phone Number","Status","Role"];
+						const clientRows = dp2_selectColumns(rows, clientCols);
+						// Update Status Cancelled -> Inactive
+						clientRows.forEach(r=>{ if (r['Status']==='Cancelled') r['Status']='Inactive'; });
+						// Column E (5th) leading zero
+						clientRows.forEach(r=>{ const k=clientCols[4]; if (r[k]!=null){ const s=String(r[k]); if(!s.startsWith('0')) r[k]='0'+s; }});
+						// Phase 7: Policy Import file
+						const policyCols = ["Policy Number","Client No","Initials","Surname","Product Description","Name","Broker Name","Client category","First Names","Cell Phone Number","Email Address","Inception date","Status"];
+						const policyRows = dp2_selectColumns(rows, policyCols).map(r=>({ ...r, Insurer: "Guardrisk Insurance Company" }));
+						// Column G (7th) leading zero
+						policyRows.forEach(r=>{ const k=policyCols[6]; if (r[k]!=null){ const s=String(r[k]); if(!s.startsWith('0')) r[k]='0'+s; }});
+						// Outputs
+						document.getElementById('dp2_outputs').style.display='block';
+						document.getElementById('dp2_dl_client_xlsx').onclick=()=>dp2_downloadXLSX(clientRows, `Client Import ${currentDate}.xlsx`);
+						document.getElementById('dp2_dl_client_csv').onclick=()=>dp2_downloadCSV(clientRows, `Client Import ${currentDate}.csv`);
+						document.getElementById('dp2_dl_policy_xlsx').onclick=()=>dp2_downloadXLSX(policyRows, `Policy Import ${currentDate}.xlsx`);
+						document.getElementById('dp2_dl_policy_csv').onclick=()=>dp2_downloadCSV(policyRows, `Policy Import ${currentDate}.csv`);
+						dp2_show(`Processed ${rows.length} rows. Client rows: ${clientRows.length}. Policy rows: ${policyRows.length}.`, 'success');
+					}catch(err){
+						dp2_show('Processing failed: '+(err&&err.message?err.message:err),'error');
+					}
+				});
+			}
+		}
+		document.addEventListener('DOMContentLoaded', dp2_wire);
 
         function showStatus(message, type) {
             const container = document.getElementById('statusContainer');
