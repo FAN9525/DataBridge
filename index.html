@@ -726,11 +726,11 @@
                             <p class="profile-info">Upload and compare client sources. Configure match rules and view diffs.</p>
                             <div style="display:flex; gap:1rem; flex-wrap:wrap;">
                                 <label class="file-input-wrapper">
-                                    Source A
+                                    Old
                                     <input type="file" id="dp_sourceA" accept=".xlsx,.xls,.csv">
                                 </label>
                                 <label class="file-input-wrapper">
-                                    Source B
+                                    New
                                     <input type="file" id="dp_sourceB" accept=".xlsx,.xls,.csv">
                                 </label>
                                 <button class="btn-primary" id="dp_compareBtn" style="width:auto;">Compare</button>
@@ -1609,7 +1609,7 @@
 			btn.addEventListener('click', async () => {
 				const fileA = document.getElementById('dp_sourceA').files[0];
 				const fileB = document.getElementById('dp_sourceB').files[0];
-				if (!fileA || !fileB) { dp_showStatus('Please select both Source A and Source B files.', 'error'); return; }
+                if (!fileA || !fileB) { dp_showStatus('Please select both Old and New files.', 'error'); return; }
 				btn.disabled = true;
 				try {
 					const [oldRows, newRows] = await Promise.all([dp_readSpreadsheet(fileA), dp_readSpreadsheet(fileB)]);
@@ -1650,7 +1650,7 @@
 				if (!el) return;
 				el.addEventListener('change', () => {
 					if (!el.files || !el.files[0]) return;
-					dp_showStatus(`${id === 'dp_sourceA' ? 'Source A' : 'Source B'}: ${el.files[0].name}`, 'info');
+                    dp_showStatus(`${id === 'dp_sourceA' ? 'Old' : 'New'}: ${el.files[0].name}`, 'info');
 				});
 			});
 		}
