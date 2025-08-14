@@ -1606,11 +1606,66 @@
 						const raw = row[c];
 						val = raw == null ? '' : String(raw);
 					}
-					obj[header] = val;
+					obj[header] = dp_isDateHeader(header) ? dp_normalizeDateString(val) : val;
 				}
 				out.push(obj);
 			}
 			return out;
+		}
+
+		// Date normalization for specific headers to enforce YYYY/MM/DD while comparing
+		const DP_DATE_HEADERS = new Set([
+			'Original inception','Inception date','Expiry date','Review date'
+		]);
+		function dp_isDateHeader(header) {
+			if (!header) return false;
+			const h = String(header).trim().toLowerCase();
+			for (const k of DP_DATE_HEADERS) {
+				if (h === k.toLowerCase()) return true;
+			}
+			return false;
+		}
+		function dp_normalizeDateString(input) {
+			if (input == null) return '';
+			let s = String(input).trim();
+			if (!s) return '';
+			// unify separators
+			s = s.replace(/-/g,'/');
+			const parts = s.split('/');
+			if (parts.length !== 3) return s; // leave as-is if unexpected
+			let a = parts[0].trim(), b = parts[1].trim(), c = parts[2].trim();
+			// If YYYY/MM/DD
+			if (a.length === 4) {
+				const yyyy = a.padStart(4,'0');
+				const mm = b.padStart(2,'0');
+				const dd = c.padStart(2,'0');
+				return `${yyyy}/${mm}/${dd}`;
+			}
+			// If DD/MM/YYYY or MM/DD/YYYY (YYYY at end)
+			if (c.length === 4) {
+				let dd, mm, yyyy = c;
+				const nA = parseInt(a,10), nB = parseInt(b,10);
+				if (!isNaN(nA) && !isNaN(nB)) {
+					if (nB > 12) { // treat as MM/DD/YYYY where day in middle > 12 means it's day
+						mm = a; dd = b;
+					} else if (nA > 12) { // DD/MM/YYYY
+						dd = a; mm = b;
+					} else { // ambiguous -> assume MM/DD/YYYY as per screenshot
+						mm = a; dd = b;
+					}
+					return `${yyyy}/${String(mm).padStart(2,'0')}/${String(dd).padStart(2,'0')}`;
+				}
+				return s;
+			}
+			// If two-digit year at end (e.g., 8/1/25) assume MM/DD/20YY
+			if (c.length === 2) {
+				const yy = parseInt(c,10);
+				if (!isNaN(yy)) {
+					const yyyy = 2000 + yy; // assume 20YY
+					return `${String(a).padStart(2,'0')}/${String(b).padStart(2,'0')}/${String(yyyy)}`;
+				}
+			}
+			return s;
 		}
 
 		async function dp_readSpreadsheet(file) {
