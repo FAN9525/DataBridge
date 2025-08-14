@@ -442,6 +442,44 @@
             color: #0c5460;
         }
 
+        /* Data Prep Steps */
+        .steps {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        .step {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #f8f9fa;
+            border: 2px solid #e1e5e9;
+            border-radius: 50px;
+            padding: 0.4rem 0.75rem;
+        }
+        .step-number {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #e9ecef;
+            color: #2c3e50;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        .step-label {
+            font-weight: 600;
+            color: #2c3e50;
+            white-space: nowrap;
+        }
+        .step.active .step-number {
+            background: #4facfe;
+            color: #fff;
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             .header {
@@ -504,6 +542,7 @@
             <div class="nav-tab active" onclick="showPage('profiles')">📁 Import Profiles</div>
             <div class="nav-tab" onclick="showPage('import')">📤 Data Import</div>
             <div class="nav-tab" onclick="showPage('settings')">⚙️ Settings</div>
+            <div class="nav-tab" onclick="showPage('dataprep')">🧰 Data Prep</div>
         </div>
 
         <!-- Content Area -->
@@ -652,6 +691,89 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Data Prep Page -->
+            <div id="dataprepPage" class="page">
+                <h2>Data Prep</h2>
+
+                <div class="form-section">
+                    <div class="steps">
+                        <div class="step active" data-step="1">
+                            <div class="step-number">1</div>
+                            <div class="step-label">Compare Clients</div>
+                        </div>
+                        <div class="step" data-step="2">
+                            <div class="step-number">2</div>
+                            <div class="step-label">Client & Policy Import</div>
+                        </div>
+                        <div class="step" data-step="3">
+                            <div class="step-number">3</div>
+                            <div class="step-label">Policy Items Import</div>
+                        </div>
+                        <div class="step" data-step="4">
+                            <div class="step-number">4</div>
+                            <div class="step-label">Client Bank</div>
+                        </div>
+                        <div class="step" data-step="5">
+                            <div class="step-number">5</div>
+                            <div class="step-label">Claims Information</div>
+                        </div>
+                    </div>
+
+                    <div id="dataprepContent">
+                        <div class="form-section" id="step1" data-step-panel="1">
+                            <h3>STEP 1: Compare Clients</h3>
+                            <p class="profile-info">Upload and compare client sources. Configure match rules and view diffs.</p>
+                            <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+                                <label class="file-input-wrapper">
+                                    Source A
+                                    <input type="file" id="dp_sourceA" accept=".xlsx,.xls,.csv">
+                                </label>
+                                <label class="file-input-wrapper">
+                                    Source B
+                                    <input type="file" id="dp_sourceB" accept=".xlsx,.xls,.csv">
+                                </label>
+                                <button class="btn-primary" id="dp_compareBtn" style="width:auto;">Compare</button>
+                            </div>
+                            <div class="preview-section" id="dp_comparePreview" style="display:none;">
+                                <h4>Preview</h4>
+                                <div style="overflow-x:auto;">
+                                    <table class="preview-table" id="dp_compareTable"></table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-section hidden" id="step2" data-step-panel="2">
+                            <h3>STEP 2: Client & Policy Import</h3>
+                            <p class="profile-info">Prepare and stage client and policy master data for import.</p>
+                            <div id="dp_step2Container"></div>
+                        </div>
+
+                        <div class="form-section hidden" id="step3" data-step-panel="3">
+                            <h3>STEP 3: Policy Items Import</h3>
+                            <p class="profile-info">Map and validate policy item lines before import.</p>
+                            <div id="dp_step3Container"></div>
+                        </div>
+
+                        <div class="form-section hidden" id="step4" data-step-panel="4">
+                            <h3>STEP 4: Client Bank</h3>
+                            <p class="profile-info">Prepare client banking details with validation.</p>
+                            <div id="dp_step4Container"></div>
+                        </div>
+
+                        <div class="form-section hidden" id="step5" data-step-panel="5">
+                            <h3>STEP 5: Claims Information</h3>
+                            <p class="profile-info">Aggregate and validate claims history.</p>
+                            <div id="dp_step5Container"></div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:0.5rem; justify-content:flex-end; margin-top:1rem;">
+                        <button class="btn-danger" id="dp_prevBtn" style="width:auto;">Previous</button>
+                        <button class="btn-success" id="dp_nextBtn" style="width:auto;">Next</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -732,6 +854,9 @@
             // Update pages
             document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
             document.getElementById(pageId + 'Page').classList.add('active');
+            if (pageId === 'dataprep') {
+                updateDataPrepStepUI();
+            }
         }
 
         // Initialize default profile
@@ -1321,6 +1446,46 @@
             if (stats) document.getElementById('progressStats').textContent = stats;
         }
 
+        // Data Prep helpers
+        function getCurrentDataPrepStep() {
+            const raw = sessionStorage.getItem('dataprepStep');
+            const step = raw ? parseInt(raw) : 1;
+            return Math.min(Math.max(step || 1, 1), 5);
+        }
+        function setCurrentDataPrepStep(step) {
+            sessionStorage.setItem('dataprepStep', String(step));
+        }
+        function updateDataPrepStepUI() {
+            const current = getCurrentDataPrepStep();
+            document.querySelectorAll('#dataprepPage .step').forEach(el => {
+                const step = parseInt(el.getAttribute('data-step'));
+                if (step === current) el.classList.add('active'); else el.classList.remove('active');
+            });
+            document.querySelectorAll('#dataprepPage [data-step-panel]').forEach(panel => {
+                const s = parseInt(panel.getAttribute('data-step-panel'));
+                panel.classList.toggle('hidden', s !== current);
+            });
+            const prev = document.getElementById('dp_prevBtn');
+            const next = document.getElementById('dp_nextBtn');
+            if (prev) prev.disabled = current === 1;
+            if (next) next.disabled = current === 5;
+        }
+        function setupDataPrepNav() {
+            // click steps
+            document.querySelectorAll('#dataprepPage .step').forEach(el => {
+                el.addEventListener('click', () => {
+                    const step = parseInt(el.getAttribute('data-step'));
+                    setCurrentDataPrepStep(step);
+                    updateDataPrepStepUI();
+                });
+            });
+            const prev = document.getElementById('dp_prevBtn');
+            const next = document.getElementById('dp_nextBtn');
+            if (prev) prev.addEventListener('click', () => { const s = Math.max(1, getCurrentDataPrepStep()-1); setCurrentDataPrepStep(s); updateDataPrepStepUI(); });
+            if (next) next.addEventListener('click', () => { const s = Math.min(5, getCurrentDataPrepStep()+1); setCurrentDataPrepStep(s); updateDataPrepStepUI(); });
+            updateDataPrepStepUI();
+        }
+
         function showStatus(message, type) {
             const container = document.getElementById('statusContainer');
             const statusDiv = document.createElement('div');
@@ -1450,6 +1615,8 @@
                     showStatus('Import history cleared', 'success');
                 });
             }
+            // Data Prep nav
+            setupDataPrepNav();
         });
 
         // Supabase env loader
