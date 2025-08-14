@@ -825,7 +825,20 @@
                                     <div class="profile-info" id="dp_notes_status_4" style="margin-top:0.25rem;"></div>
                                 </div>
                             </div>
-                            <div id="dp_step4Container"></div>
+                            <div id="dp_step4Container">
+                                <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:center;">
+                                    <label class="file-input-wrapper">
+                                        Upload mmxclientpolicies.xlsx
+                                        <input type="file" id="dp4_inputFile" accept=".xlsx,.xls,.csv">
+                                    </label>
+                                    <button class="btn-primary" id="dp4_useStep1Btn" style="width:auto;">Use Step 1 Differences</button>
+                                    <button class="btn-success" id="dp4_processBtn" style="width:auto;">Process</button>
+                                </div>
+                                <div class="batch-info" id="dp4_stats" style="margin-top:0.75rem;"></div>
+                                <div id="dp4_outputs" style="margin-top:0.75rem; display:none;">
+                                    <button class="btn-primary" id="dp4_dl_csv" style="width:auto;">Download ClientEFT CSV</button>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="form-section hidden" id="step5" data-step-panel="5">
@@ -2119,6 +2132,61 @@
 		}
 		let dp3_downloadSectionsSeen;
 		document.addEventListener('DOMContentLoaded', dp3_wire);
+
+		// ===== Data Prep STEP 4: Extract bank info =====
+		let dp4_sourceRows = [];
+		function dp4_show(message, type='info') {
+			const el = document.getElementById('dp4_stats');
+			if (!el) return;
+			el.innerHTML = `<div class="status-message status-${type}">${message}</div>`;
+		}
+		async function dp4_readInput() {
+			const file = document.getElementById('dp4_inputFile').files[0];
+			if (!file) return null;
+			const name=(file.name||'').toLowerCase();
+			return new Promise((resolve,reject)=>{
+				const reader=new FileReader();
+				reader.onerror=()=>reject(new Error('Failed to read file: '+file.name));
+				if(name.endsWith('.csv')){ reader.onload=e=>{ try{ const wb=XLSX.read(e.target.result,{type:'string'}); const ws=wb.Sheets[wb.SheetNames[0]]; resolve(dp_sheetToDisplayJson(ws)); }catch(err){reject(err);} }; reader.readAsText(file);} else { reader.onload=e=>{ try{ const data=new Uint8Array(e.target.result); const wb=XLSX.read(data,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]]; resolve(dp_sheetToDisplayJson(ws)); }catch(err){reject(err);} }; reader.readAsArrayBuffer(file);} 
+			});
+		}
+		function dp4_extract(rows) {
+			if (!rows || !rows.length) return [];
+			const headers = Object.keys(rows[0]);
+			const keep = ['Policy Number','Bank account holder name','Bank account no','Bank branch code','Payment Method'];
+			const present = keep.filter(k=>headers.includes(k));
+			const out = rows.map(r=>{ const o={}; present.forEach(k=>o[k]=r[k]); return o; });
+			// Remove formatting from account/branch codes
+			['Bank account no','Bank branch code'].forEach(k=>{
+				if (!present.includes(k)) return;
+				out.forEach(r=>{ if(r[k]!=null){ r[k]=String(r[k]).replace(/\.0$/,''); }});
+			});
+			// De-duplicate
+			const seen=new Set(); const uniq=[];
+			for(const r of out){ const key=present.map(k=>String(r[k]??'')).join('|'); if(!seen.has(key)){ seen.add(key); uniq.push(r);} }
+			return uniq;
+		}
+		function dp4_downloadCSV(rows, name){
+			const ws = XLSX.utils.json_to_sheet(rows);
+			const csv = XLSX.utils.sheet_to_csv(ws);
+			const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+			const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+		}
+		function dp4_wire(){
+			const useStep1Btn=document.getElementById('dp4_useStep1Btn');
+			if(useStep1Btn && !useStep1Btn.__wired){ useStep1Btn.__wired=true; useStep1Btn.addEventListener('click',()=>{ if(!dp_compareChanged||!dp_compareChanged.length){ dp4_show('No Step 1 data present. Please run Step 1 or upload a file.','error'); return;} dp4_sourceRows=[...dp_compareChanged]; dp4_show(`Loaded ${dp4_sourceRows.length} rows from Step 1 differences.`,'success'); }); }
+			const processBtn=document.getElementById('dp4_processBtn');
+			if(processBtn && !processBtn.__wired){ processBtn.__wired=true; processBtn.addEventListener('click', async ()=>{
+				try{
+					if(!dp4_sourceRows.length){ const rows=await dp4_readInput(); if(!rows||!rows.length){ dp4_show('Upload mmxclientpolicies or use Step 1 data.','error'); return;} dp4_sourceRows=rows; }
+					const bank = dp4_extract(dp4_sourceRows);
+					document.getElementById('dp4_outputs').style.display='block';
+					document.getElementById('dp4_dl_csv').onclick=()=>dp4_downloadCSV(bank, `ClientEFT_${dp2_nowDate()}.csv`);
+					dp4_show(`Extracted ${bank.length} unique bank records.`, 'success');
+				}catch(err){ dp4_show('Processing failed: '+(err&&err.message?err.message:err),'error'); }
+			}); }
+		}
+		document.addEventListener('DOMContentLoaded', dp4_wire);
 
         function showStatus(message, type) {
             const container = document.getElementById('statusContainer');
