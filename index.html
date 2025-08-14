@@ -1658,9 +1658,9 @@
 		}
 
 		// Date normalization for specific headers to enforce YYYY/MM/DD while comparing
-		const DP_DATE_HEADERS = new Set([
-			'Original inception','Original inception date','Inception date','Expiry date','Review date','Birth Date'
-		]);
+        const DP_DATE_HEADERS = new Set([
+            'Original inception','Original inception date','Inception date','Expiry date','Review date','Birth Date'
+        ]);
 		function dp_isDateHeader(header) {
 			if (!header) return false;
 			const h = String(header).trim().toLowerCase();
@@ -1669,7 +1669,7 @@
 			}
 			return false;
 		}
-		function dp_normalizeDateString(input, header) {
+        function dp_normalizeDateString(input, header) {
 			if (input == null) return '';
 			let s = String(input).trim();
 			if (!s) return '';
@@ -1680,10 +1680,10 @@
 			let a = parts[0].trim(), b = parts[1].trim(), c = parts[2].trim();
 			// If YYYY/MM/DD
 			if (a.length === 4) {
-				const yyyy = a.padStart(4,'0');
-				const mm = b.padStart(2,'0');
-				const dd = c.padStart(2,'0');
-				return `${yyyy}/${mm}/${dd}`;
+                const yyyy = a.padStart(4,'0');
+                const mm = b.padStart(2,'0');
+                const dd = c.padStart(2,'0');
+                return `${dd}/${mm}/${yyyy}`;
 			}
 			// If DD/MM/YYYY or MM/DD/YYYY (YYYY at end)
 			if (c.length === 4) {
@@ -1703,7 +1703,7 @@
 					if (header && /birth/i.test(header) && yNum > currentYear) {
 						yyyy = String(yNum - 100);
 					}
-					return `${yyyy}/${String(mm).padStart(2,'0')}/${String(dd).padStart(2,'0')}`;
+                    return `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}/${yyyy}`;
 				}
 				return s;
 			}
@@ -1720,7 +1720,8 @@
 						// General pivot window
 						yyyy = (yy <= currentYY) ? 2000 + yy : 1900 + yy;
 					}
-					return `${String(a).padStart(2,'0')}/${String(b).padStart(2,'0')}/${String(yyyy)}`;
+                    // a=MM, b=DD -> return DD/MM/YYYY
+                    return `${String(b).padStart(2,'0')}/${String(a).padStart(2,'0')}/${String(yyyy)}`;
 				}
 			}
 			return s;
