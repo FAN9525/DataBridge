@@ -1936,9 +1936,10 @@
 			});
 		}
 		function dp2_downloadXLSX(rows, name) {
-			const ws = XLSX.utils.json_to_sheet(rows);
-			// Force text cells (avoid Excel auto-format, especially dates)
-			Object.keys(ws).forEach(addr=>{ if(addr[0]!=='!'){ const cell=ws[addr]; if(cell){ cell.t='s'; cell.z='@'; } } });
+			// Build worksheet with text-preserving cells
+			const ws = XLSX.utils.json_to_sheet(rows, { cellDates:false, raw:false });
+			// Force text cells (avoid Excel auto-format)
+			Object.keys(ws).forEach(addr=>{ if(addr[0]!=='!'){ const cell=ws[addr]; if(cell){ cell.t='s'; cell.z='@'; if(typeof cell.v!=='string') cell.v = String(cell.v ?? ''); } } });
 			const wb = XLSX.utils.book_new();
 			XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
 			XLSX.writeFile(wb, name);
@@ -2063,7 +2064,13 @@
 					const num = parseFloat(String(newRow[keys[20]]).replace(/,/g,''));
 					newRow[keys[20]] = Number.isFinite(num) ? num.toFixed(2) : newRow[keys[20]];
 				}
-				// Column V: keep displayed text as-is (no date reformatting)
+				// Column V header often 'Date Added' → normalize like Step 1 to YYYY/MM/DD and keep as text
+				if (keys[21] in newRow && newRow[keys[21]]!=null) {
+					const header = String(keys[21]||'');
+					if (/^date\s*added$/i.test(header)) {
+						newRow[keys[21]] = dp_normalizeDateString(newRow[keys[21]], header);
+					}
+				}
 				out.push(newRow);
 			}
 			return { rows: out, errors };
