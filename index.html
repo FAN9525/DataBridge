@@ -2046,8 +2046,7 @@
 						// Phase 7: Policy Import file
 						const policyCols = ["Policy Number","Client No","Initials","Surname","Product Description","Name","Broker Name","Client category","First Names","Cell Phone Number","Email Address","Inception date","Status"];
 						const policyRows = dp2_selectColumns(rows, policyCols).map(r=>({ ...r, Insurer: "Guardrisk Insurance Company" }));
-						// Column G (7th) leading zero
-						policyRows.forEach(r=>{ const k=policyCols[6]; if (r[k]!=null){ const s=String(r[k]); if(!s.startsWith('0')) r[k]='0'+s; }});
+						// Do not alter Broker Name (column G). Keep original text without forcing a leading zero.
 						// Outputs
 						document.getElementById('dp2_outputs').style.display='block';
 						document.getElementById('dp2_dl_client_xlsx').onclick=()=>dp2_downloadXLSX(clientRows, `Client Import ${currentDate}.xlsx`);
